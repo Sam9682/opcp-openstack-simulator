@@ -1,0 +1,20 @@
+services:
+  app:
+    build: .
+    container_name: opcp-openstack-simulator
+    expose:
+      - "5000"
+    restart: unless-stopped
+    environment:
+      - FLASK_ENV=production
+
+  nginx:
+    image: nginx:alpine
+    container_name: opcp-openstack-simulator-nginx
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./conf/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app
+    restart: unless-stopped
