@@ -313,6 +313,30 @@ Without nginx, you can point the CLI directly at port 8000:
 auth_url: http://localhost:8000/identity/v3
 ```
 
+### Docker Deployment (Recommended)
+
+The simplest way to run the simulator is with Docker Compose:
+
+```bash
+# Start the simulator (builds the image and starts nginx + gunicorn)
+docker compose up -d
+
+# Check it's running
+docker compose ps
+
+# View logs
+docker compose logs -f
+
+# Stop
+docker compose down
+```
+
+This starts:
+- **app** container — gunicorn serving the Flask API on port 5000 (internal)
+- **nginx** container — reverse proxy exposed on `localhost:5000`
+
+The OpenStack CLI connects to `http://localhost:5000/identity/v3` as defined in `deploy/clouds.yaml`.
+
 ### API Endpoints
 
 |      Service        |         Base Path          |                    Description                     |
