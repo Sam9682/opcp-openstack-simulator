@@ -1,0 +1,17 @@
+# OpenStack CLI configuration for the simulator.
+#
+# Copy this file to ~/.config/openstack/clouds.yaml
+# Then use: openstack --os-cloud simulator <command>
+#
+# Or set the environment variable: export OS_CLOUD=simulator
+
+clouds:
+  simulator:
+    auth:
+      auth_url: http://localhost:5000/identity/v3
+      application_credential_id: "simulator-app-credential"
+      application_credential_secret: "simulator-secret"
+    region_name: RegionOne
+    interface: public
+    identity_api_version: 3
+    auth_type: v3applicationcredential
