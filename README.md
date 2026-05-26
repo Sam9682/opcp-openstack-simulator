@@ -18,7 +18,7 @@ A pure-Python, in-memory OpenStack simulator designed for the `opcp-openstack-fi
 - Python 3.9+
 - nginx (optional, for production deployment)
 
-## Installation
+## Installation the simulator
 
 ```bash
 # Clone the repository
@@ -32,7 +32,105 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
-## Quick Start
+## Starting the API Server
+
+```bash
+# Development mode (Flask dev server, port 8000)
+./deploy/start.sh --dev
+
+# Production mode (gunicorn, port 8000 — use nginx to expose on port 5000)
+./deploy/start.sh
+```
+
+## Quick Start with OpenStack CLI
+
+The simulator exposes a full OpenStack-compatible REST API that works with the standard `python-openstackclient` CLI.
+
+### Configuring the OpenStack CLI
+
+1. Install the OpenStack CLI:
+
+```bash
+pip install python-openstackclient
+```
+
+2. Copy the provided `clouds.yaml` to your OpenStack config directory:
+
+```bash
+mkdir -p ~/.config/openstack
+cp deploy/clouds.yaml ~/.config/openstack/clouds.yaml
+```
+
+3. Use the simulator:
+
+```bash
+# Set the cloud (or pass --os-cloud simulator to each command)
+export OS_CLOUD=simulator
+export OS_AUTH_URL=http://www.opcp-psmc.com:6124/identity/v3
+export OS_APPLICATION_CREDENTIAL_ID=simulator-app-credential
+export OS_APPLICATION_CREDENTIAL_SECRET=simulator-secret
+export OS_REGION_NAME=RegionOne
+export OS_INTERFACE=public
+export OS_IDENTITY_API_VERSION=3
+export OS_AUTH_TYPE=v3applicationcredential
+
+# Authenticate and list servers
+openstack server list
+
+# Create a server
+openstack server create --flavor m1.small --image ubuntu-22.04 my-server
+
+# Create a network
+openstack network create my-network
+
+# Create a volume
+openstack volume create --size 10 my-volume
+
+# Create a security group
+openstack security group create my-sg
+
+# Add a rule
+openstack security group rule create --protocol tcp --dst-port 80 my-sg
+```
+
+### Application Credentials
+
+The simulator accepts any non-empty application credential ID and secret. The default `clouds.yaml` uses:
+
+|           Field                 |                Value                |
+|---------------------------------|-------------------------------------|
+| `auth_url`                      | `http://localhost:5000/identity/v3` |
+| `application_credential_id`     | `simulator-app-credential`          |
+| `application_credential_secret` | `simulator-secret`                  |
+| `auth_type`                     | `v3applicationcredential`           |
+
+You can also use password-based authentication:
+
+```yaml
+clouds:
+  simulator:
+    auth:
+      auth_url: http://localhost:5000/identity/v3
+      username: admin
+      password: admin
+      project_name: simulator-project
+      user_domain_name: Default
+      project_domain_name: Default
+    region_name: RegionOne
+    identity_api_version: 3
+```
+
+export OS_CLOUD=simulator
+export OS_AUTH_URL=http://localhost:5000/identity/v3
+export OS_APPLICATION_CREDENTIAL_ID=simulator-app-credential
+export OS_APPLICATION_CREDENTIAL_SECRET=simulator-secret
+export OS_REGION_NAME=RegionOne
+export OS_INTERFACE=public
+export OS_IDENTITY_API_VERSION=3
+export OS_AUTH_TYPE=v3applicationcredential
+
+
+## Quick Start for python Openstack client
 
 ```python
 from openstack_simulator import Simulator
@@ -185,6 +283,8 @@ except SimulatorError as e:
 | `ResourceNotFoundError` | Operating on a resource that doesn't exist |
 | `InvalidStateError` | Invalid operation for current state (e.g., deleting an attached volume) |
 
+
+
 ## Resource Limits
 
 The simulator enforces quotas just like a real OpenStack environment:
@@ -211,86 +311,6 @@ pytest -v
 pytest --cov=openstack_simulator --cov-report=term-missing
 ```
 
-## Web API — Using with the OpenStack CLI
-
-The simulator exposes a full OpenStack-compatible REST API that works with the standard `python-openstackclient` CLI.
-
-### Starting the API Server
-
-```bash
-# Development mode (Flask dev server, port 8000)
-./deploy/start.sh --dev
-
-# Production mode (gunicorn, port 8000 — use nginx to expose on port 5000)
-./deploy/start.sh
-```
-
-### Configuring the OpenStack CLI
-
-1. Install the OpenStack CLI:
-
-```bash
-pip install python-openstackclient
-```
-
-2. Copy the provided `clouds.yaml` to your OpenStack config directory:
-
-```bash
-mkdir -p ~/.config/openstack
-cp deploy/clouds.yaml ~/.config/openstack/clouds.yaml
-```
-
-3. Use the simulator:
-
-```bash
-# Set the cloud (or pass --os-cloud simulator to each command)
-export OS_CLOUD=simulator
-
-# Authenticate and list servers
-openstack server list
-
-# Create a server
-openstack server create --flavor m1.small --image ubuntu-22.04 my-server
-
-# Create a network
-openstack network create my-network
-
-# Create a volume
-openstack volume create --size 10 my-volume
-
-# Create a security group
-openstack security group create my-sg
-
-# Add a rule
-openstack security group rule create --protocol tcp --dst-port 80 my-sg
-```
-
-### Application Credentials
-
-The simulator accepts any non-empty application credential ID and secret. The default `clouds.yaml` uses:
-
-|           Field                 |                Value                |
-|---------------------------------|-------------------------------------|
-| `auth_url`                      | `http://localhost:5000/identity/v3` |
-| `application_credential_id`     | `simulator-app-credential`          |
-| `application_credential_secret` | `simulator-secret`                  |
-| `auth_type`                     | `v3applicationcredential`           |
-
-You can also use password-based authentication:
-
-```yaml
-clouds:
-  simulator:
-    auth:
-      auth_url: http://localhost:5000/identity/v3
-      username: admin
-      password: admin
-      project_name: simulator-project
-      user_domain_name: Default
-      project_domain_name: Default
-    region_name: RegionOne
-    identity_api_version: 3
-```
 
 ### Nginx Setup (Production)
 
