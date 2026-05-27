@@ -172,9 +172,9 @@ def _render_readme() -> str:
     # Get the base URL from the current request
     base_url = f"{request.scheme}://{request.host}"
     # Add port if it's not the standard port for the scheme
-    if (request.scheme == "http" and request.environ.get('SERVER_PORT') != "80") or \
-       (request.scheme == "https" and request.environ.get('SERVER_PORT') != "443"):
-        base_url += f":{request.environ.get('SERVER_PORT')}"
+    #if (request.scheme == "http" and request.environ.get('SERVER_PORT') != "80") or \
+    #   (request.scheme == "https" and request.environ.get('SERVER_PORT') != "443"):
+    #    base_url += f":{request.environ.get('SERVER_PORT')}"
     md_content = md_content.replace("http://localhost:5000", base_url)
 
     html_body = markdown.markdown(
