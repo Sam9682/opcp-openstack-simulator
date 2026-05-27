@@ -65,27 +65,6 @@ def create_app(config: dict | None = None) -> Flask:
     return app
 
 
-def _render_readme() -> str:
-    """Render README.md as a styled HTML page."""
-    # Look for README.md relative to the project root
-    readme_path = Path(__file__).resolve().parent.parent.parent / "README.md"
-    if not readme_path.exists():
-        # Fallback: look in /app (Docker container)
-        readme_path = Path("/app/README.md")
-
-    if readme_path.exists():
-        md_content = readme_path.read_text(encoding="utf-8")
-    else:
-        md_content = "# OpenStack Simulator\n\nREADME.md not found."
-
-    html_body = markdown.markdown(
-        md_content,
-        extensions=["tables", "fenced_code", "codehilite", "toc"],
-    )
-
-    return _HTML_TEMPLATE.replace("{{content}}", html_body)
-
-
 _HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -175,3 +154,32 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
 </body>
 </html>"""
+
+def _render_readme() -> str:
+    """Render README.md as a styled HTML page."""
+    # Look for README.md relative to the project root
+    readme_path = Path(__file__).resolve().parent.parent.parent / "README.md"
+    if not readme_path.exists():
+        # Fallback: look in /app (Docker container)
+        readme_path = Path("/app/README.md")
+
+    if readme_path.exists():
+        md_content = readme_path.read_text(encoding="utf-8")
+    else:
+        md_content = "# OpenStack Simulator\n\nREADME.md not found."
+
+    # Replace localhost URLs with the actual server URL
+    # Get the base URL from the current request
+    base_url = f"{request.scheme}://{request.host}"
+    # Add port if it's not the standard port for the scheme
+    if (request.scheme == "http" and request.environ.get('SERVER_PORT') != "80") or \
+       (request.scheme == "https" and request.environ.get('SERVER_PORT') != "443"):
+        base_url += f":{request.environ.get('SERVER_PORT')}"
+    md_content = md_content.replace("http://localhost:5000", base_url)
+
+    html_body = markdown.markdown(
+        md_content,
+        extensions=["tables", "fenced_code", "codehilite", "toc"],
+    )
+
+    return _HTML_TEMPLATE.replace("{{content}}", html_body)

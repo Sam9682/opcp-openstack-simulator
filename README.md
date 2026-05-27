@@ -1,4 +1,4 @@
-# OpenStack Simulator
+# OPCP OpenStack Simulator
 
 A pure-Python, in-memory OpenStack simulator designed for the `opcp-openstack-first-steps` training framework. It provides drop-in replacements for Keystone (auth), Nova (compute), Neutron (networking), and Cinder (block storage) manager interfaces — no live OpenStack environment required.
 
@@ -121,7 +121,7 @@ clouds:
 ```
 
 export OS_CLOUD=simulator
-export OS_AUTH_URL=http://localhost:5000/identity/v3
+export OS_AUTH_URL=http://opcp-psmc.com:6424/identity/v3
 export OS_APPLICATION_CREDENTIAL_ID=simulator-app-credential
 export OS_APPLICATION_CREDENTIAL_SECRET=simulator-secret
 export OS_REGION_NAME=RegionOne
