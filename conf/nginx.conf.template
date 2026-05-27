@@ -10,59 +10,54 @@ http {
         server app:5000;
     }
 
+    # HTTP server - serves the web page and API
     server {
-        listen 443 ssl;
+        listen 80;
         server_name _;
 
-        ssl_certificate /etc/nginx/ssl/fullchain.pem;
-        ssl_certificate_key /etc/nginx/ssl/privkey.pem;
-        ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_ciphers HIGH:!aNULL:!MD5;
+        client_max_body_size 10m;
 
-        root /var/www/html;
-        index index.html;
+        # Default page: render README.md as HTML
+        location = / {
+            proxy_pass http://app/;
+            proxy_set_header Host $host:$server_port;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header Accept text/html;
+        }
 
-        # Proxy API and app routes to Flask
-        location /api/ {
-            proxy_pass http://app;
-            proxy_set_header Host $host;
+        # OpenStack API paths
+        location /identity/ {
+            proxy_pass http://app/identity/;
+            proxy_set_header Host $host:$server_port;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        location /health {
-            proxy_pass http://app;
-            proxy_set_header Host $host;
-        }
-
-        location /admin {
-            proxy_pass http://app;
-            proxy_set_header Host $host;
+        location /compute/ {
+            proxy_pass http://app/compute/;
+            proxy_set_header Host $host:$server_port;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        location /billing {
-            proxy_pass http://app;
-            proxy_set_header Host $host;
+        location /network/ {
+            proxy_pass http://app/network/;
+            proxy_set_header Host $host:$server_port;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # Serve static files directly
-        location / {
-            try_files $uri $uri/ /index.html;
+        location /volume/ {
+            proxy_pass http://app/volume/;
+            proxy_set_header Host $host:$server_port;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
         }
-
-        # Cache static assets
-        location ~* \.(css|js|png|jpg|jpeg|gif|svg|ico|woff2?)$ {
-            expires 1h;
-            add_header Cache-Control "public, no-transform";
-        }
-
-        error_page 404 /404.html;
     }
 }
