@@ -66,7 +66,7 @@ cp deploy/clouds.yaml ~/.config/openstack/clouds.yaml
 ```bash
 # Set the cloud (or pass --os-cloud simulator to each command)
 export OS_CLOUD=simulator
-export OS_AUTH_URL=http://www.opcp-psmc.com:6124/identity/v3
+export OS_AUTH_URL=http://localhost:5000/identity/v3
 export OS_APPLICATION_CREDENTIAL_ID=simulator-app-credential
 export OS_APPLICATION_CREDENTIAL_SECRET=simulator-secret
 export OS_REGION_NAME=RegionOne
@@ -121,7 +121,7 @@ clouds:
 ```
 
 export OS_CLOUD=simulator
-export OS_AUTH_URL=http://opcp-psmc.com:6424/identity/v3
+export OS_AUTH_URL=http://localhost:5000/identity/v3
 export OS_APPLICATION_CREDENTIAL_ID=simulator-app-credential
 export OS_APPLICATION_CREDENTIAL_SECRET=simulator-secret
 export OS_REGION_NAME=RegionOne
@@ -186,12 +186,12 @@ Only include the keys you want to override — unspecified keys keep their defau
 
 The `Simulator` class is the main entry point. It exposes five manager attributes:
 
-| Attribute | Manager | Purpose |
-|-----------|---------|---------|
-| `sim.auth_manager` | AuthManager | Authentication and token management |
-| `sim.compute_manager` | ComputeManager | Instance lifecycle |
-| `sim.network_manager` | NetworkManager | Networks, subnets, routers, ports, bonds |
-| `sim.volume_manager` | VolumeManager | Volume lifecycle and attachments |
+|          Attribute           | Manager | Purpose |
+|------------------------------|---------|---------|
+| `sim.auth_manager`           | AuthManager | Authentication and token management |
+| `sim.compute_manager`        | ComputeManager       | Instance lifecycle |
+| `sim.network_manager`        | NetworkManager       | Networks, subnets, routers, ports, bonds |
+| `sim.volume_manager`         | VolumeManager        | Volume lifecycle and attachments |
 | `sim.security_group_manager` | SecurityGroupManager | Security groups and rules |
 
 ### AuthManager
@@ -274,14 +274,14 @@ except SimulatorError as e:
     print(f"Simulator error: {e.message}")
 ```
 
-| Exception | When it's raised |
-|-----------|-----------------|
-| `AuthenticationError` | Empty username or password |
-| `TokenExpiredError` | Validating an expired token |
-| `ResourceLimitExceededError` | Creating a resource beyond the quota |
-| `DuplicateResourceError` | Creating a resource with an existing name |
-| `ResourceNotFoundError` | Operating on a resource that doesn't exist |
-| `InvalidStateError` | Invalid operation for current state (e.g., deleting an attached volume) |
+|          Exception           |                        When it's raised                                 |
+|------------------------------|-------------------------------------------------------------------------|
+| `AuthenticationError`        | Empty username or password                                              |
+| `TokenExpiredError`          | Validating an expired token                                             |
+| `ResourceLimitExceededError` | Creating a resource beyond the quota                                    |
+| `DuplicateResourceError`     | Creating a resource with an existing name                               |
+| `ResourceNotFoundError`      | Operating on a resource that doesn't exist                              |
+| `InvalidStateError`          | Invalid operation for current state (e.g., deleting an attached volume) |
 
 
 
@@ -289,12 +289,12 @@ except SimulatorError as e:
 
 The simulator enforces quotas just like a real OpenStack environment:
 
-| Resource | Default Limit |
-|----------|--------------|
-| Instances | 3 |
-| Networks | 2 |
-| Volumes | 3 |
-| Security Groups | 5 |
+|     Resource    | Default Limit |
+|-----------------|---------------|
+| Instances       | 3             |
+| Networks        | 2             |
+| Volumes         | 3             |
+| Security Groups | 5             |
 
 Deleting a resource frees its quota slot, allowing new resources to be created.
 
@@ -330,7 +330,7 @@ Without nginx, you can point the CLI directly at port 8000:
 
 ```yaml
 # In clouds.yaml, change auth_url to:
-auth_url: http://localhost:8000/identity/v3
+auth_url: http://localhost:5000/identity/v3
 ```
 
 ### Docker Deployment (Recommended)
