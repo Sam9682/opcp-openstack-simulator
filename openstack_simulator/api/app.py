@@ -14,6 +14,7 @@ from openstack_simulator.api.compute import compute_bp
 from openstack_simulator.api.network import network_bp
 from openstack_simulator.api.volume import volume_bp
 from openstack_simulator.api.baremetal import baremetal_bp
+from openstack_simulator.api.image import image_bp
 
 
 def create_app(config: dict | None = None) -> Flask:
@@ -44,6 +45,7 @@ def create_app(config: dict | None = None) -> Flask:
     app.register_blueprint(network_bp)
     app.register_blueprint(volume_bp)
     app.register_blueprint(baremetal_bp)
+    app.register_blueprint(image_bp)
 
     # Health check endpoint
     @app.route("/health", methods=["GET"])

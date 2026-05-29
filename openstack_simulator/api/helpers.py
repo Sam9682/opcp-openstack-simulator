@@ -94,5 +94,15 @@ def build_service_catalog(base_url: str) -> list[dict]:
                 {"id": "bm-int", "interface": "internal", "region_id": region, "url": f"{base_url}/baremetal/v1", "region": region},
             ],
         },
+        {
+            "type": "image",
+            "id": "image-service-id",
+            "name": "glance",
+            "endpoints": [
+                {"id": "i-pub", "interface": "public", "region_id": region, "url": f"{base_url}/image/v2", "region": region},
+                {"id": "i-int", "interface": "internal", "region_id": region, "url": f"{base_url}/image/v2", "region": region},
+                {"id": "i-adm", "interface": "admin", "region_id": region, "url": f"{base_url}/image/v2", "region": region},
+            ],
+        },
     ]
     return services
