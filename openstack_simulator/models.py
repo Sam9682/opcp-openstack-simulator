@@ -328,6 +328,63 @@ class SecurityGroup:
 
 
 @dataclass
+class BaremetalNode:
+    """Simulated Ironic baremetal node."""
+
+    id: str
+    name: str
+    driver: str
+    power_state: str
+    provision_state: str
+    memory_mb: int
+    cpus: int
+    local_gb: int
+    cpu_arch: str
+    driver_info: dict = field(default_factory=dict)
+    properties: dict = field(default_factory=dict)
+    status: str = "ACTIVE"
+    created_at: str = ""
+    updated_at: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "driver": self.driver,
+            "power_state": self.power_state,
+            "provision_state": self.provision_state,
+            "memory_mb": self.memory_mb,
+            "cpus": self.cpus,
+            "local_gb": self.local_gb,
+            "cpu_arch": self.cpu_arch,
+            "driver_info": dict(self.driver_info),
+            "properties": dict(self.properties),
+            "status": self.status,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> BaremetalNode:
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            driver=data["driver"],
+            power_state=data["power_state"],
+            provision_state=data["provision_state"],
+            memory_mb=data["memory_mb"],
+            cpus=data["cpus"],
+            local_gb=data["local_gb"],
+            cpu_arch=data["cpu_arch"],
+            driver_info=dict(data.get("driver_info", {})),
+            properties=dict(data.get("properties", {})),
+            status=data.get("status", "ACTIVE"),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
+        )
+
+
+@dataclass
 class Snapshot:
     """Snapshot of an instance or volume."""
 
@@ -354,4 +411,34 @@ class Snapshot:
             source_id=data["source_id"],
             source_type=data["source_type"],
             created_at=data["created_at"],
+        )
+
+
+@dataclass
+class BaremetalPort:
+    """Simulated Ironic baremetal port (network interface)."""
+
+    id: str
+    node_id: str
+    address: str  # MAC address
+    status: str = "ACTIVE"
+    created_at: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "node_id": self.node_id,
+            "address": self.address,
+            "status": self.status,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> BaremetalPort:
+        return cls(
+            id=data["id"],
+            node_id=data["node_id"],
+            address=data["address"],
+            status=data.get("status", "ACTIVE"),
+            created_at=data.get("created_at", ""),
         )

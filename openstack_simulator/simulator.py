@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from openstack_simulator.limiter import ResourceLimiter
 from openstack_simulator.managers.auth import AuthManager
+from openstack_simulator.managers.baremetal import BaremetalManager
 from openstack_simulator.managers.compute import ComputeManager
 from openstack_simulator.managers.network import NetworkManager
 from openstack_simulator.managers.security_group import SecurityGroupManager
@@ -18,6 +19,8 @@ DEFAULT_CONFIG: dict[str, object] = {
     "max_networks": 2,
     "max_volumes": 3,
     "max_security_groups": 5,
+    "max_baremetal_nodes": 10,
+    "max_baremetal_ports": 20,
 }
 
 
@@ -46,6 +49,8 @@ class Simulator:
                 "networks": int(self.config["max_networks"]),
                 "volumes": int(self.config["max_volumes"]),
                 "security_groups": int(self.config["max_security_groups"]),
+                "baremetal_nodes": int(self.config["max_baremetal_nodes"]),
+                "baremetal_ports": int(self.config["max_baremetal_ports"]),
             }
         )
 
@@ -59,3 +64,4 @@ class Simulator:
         self.security_group_manager = SecurityGroupManager(
             store=self.store, limiter=self.limiter
         )
+        self.baremetal_manager = BaremetalManager(store=self.store, limiter=self.limiter)

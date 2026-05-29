@@ -63,7 +63,7 @@ class TestIdentityAPI:
         data = resp.get_json()
         assert "token" in data
         assert "catalog" in data["token"]
-        assert len(data["token"]["catalog"]) == 4
+        assert len(data["token"]["catalog"]) == 5
 
     def test_create_token_application_credential(self, client):
         resp = client.post("/identity/v3/auth/tokens", json={

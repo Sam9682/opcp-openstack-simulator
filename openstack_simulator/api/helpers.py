@@ -85,5 +85,14 @@ def build_service_catalog(base_url: str) -> list[dict]:
                 {"id": "v-int", "interface": "internal", "region_id": region, "url": f"{base_url}/volume/v3/{project_id}", "region": region},
             ],
         },
+        {
+            "type": "baremetal",
+            "id": "baremetal-service-id",
+            "name": "ironic",
+            "endpoints": [
+                {"id": "bm-pub", "interface": "public", "region_id": region, "url": f"{base_url}/baremetal/v1", "region": region},
+                {"id": "bm-int", "interface": "internal", "region_id": region, "url": f"{base_url}/baremetal/v1", "region": region},
+            ],
+        },
     ]
     return services

@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from openstack_simulator.models import (
+    BaremetalNode,
+    BaremetalPort,
     Bond,
     Instance,
     Network,
@@ -32,6 +34,8 @@ class ResourceStore:
         self.security_groups: dict[str, SecurityGroup] = {}
         self.tokens: dict[str, Token] = {}
         self.snapshots: list[Snapshot] = []
+        self.baremetal_nodes: dict[str, BaremetalNode] = {}
+        self.baremetal_ports: dict[str, BaremetalPort] = {}
 
     def add(self, resource_type: str, name: str, resource: Any) -> None:
         """Store a resource by type and name."""
