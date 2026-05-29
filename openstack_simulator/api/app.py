@@ -45,6 +45,11 @@ def create_app(config: dict | None = None) -> Flask:
     app.register_blueprint(volume_bp)
     app.register_blueprint(baremetal_bp)
 
+    # Health check endpoint
+    @app.route("/health", methods=["GET"])
+    def health():
+        return {"status": "ok"}
+
     # Root endpoint: serve README as HTML for browsers, JSON for API clients
     @app.route("/", methods=["GET"])
     def root():
