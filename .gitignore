@@ -30,3 +30,21 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Environment variables
+.env
+.env.*
+
+# SSL certificates (sensitive)
+ssl/*.pem
+ssl/*.key
+ssl/*.crt
+
+# Generated nginx config (built from template)
+conf/nginx.conf
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log

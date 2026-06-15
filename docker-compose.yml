@@ -24,7 +24,7 @@ services:
 
   nginx:
     image: nginx:alpine
-    container_name: opcp-openstack-simulator-nginx-${USER_ID:-0}-${HTTPS_PORT:-5002}
+    container_name: opcp-openstack-simulator-nginx-${USER_ID:-0}-${HTTPS_PORT:-5001}
     ports:
       - "${HTTPS_PORT:-5001}:443"
     volumes:
@@ -34,4 +34,4 @@ services:
       - app
     restart: unless-stopped
     environment:
-      - HTTPS_PORT=${HTTPS_PORT:-5002}
+      - HTTPS_PORT=${HTTPS_PORT:-5001}

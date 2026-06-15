@@ -174,7 +174,6 @@ After the simulator is running, configure the OpenStack CLI to connect to it.
 ```bash
 mkdir -p ~/.config/openstack
 cp deploy/clouds.yaml ~/.config/openstack/clouds.yaml
-export OS_CLOUD=simulator
 ```
 
 ### Using Environment Variables

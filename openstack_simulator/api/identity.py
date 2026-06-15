@@ -51,17 +51,38 @@ def create_token():
     username = ""
     password = ""
 
+    # Handle password authentication
     if "password" in methods:
         user_data = identity.get("password", {}).get("user", {})
         username = user_data.get("name", "") or user_data.get("id", "")
         password = user_data.get("password", "")
+    # Handle application_credential authentication
     elif "application_credential" in methods:
         app_cred = identity.get("application_credential", {})
         # Treat app credential id/name as username, secret as password
         username = app_cred.get("name", "") or app_cred.get("id", "")
         password = app_cred.get("secret", "")
+    # Handle direct password auth without explicit methods array (common in CLI usage)
     else:
-        return jsonify({"error": {"message": "Unsupported auth method", "code": 400}}), 400
+        # Check for direct password auth format
+        user_data = identity.get("password", {}).get("user", {})
+        if user_data:
+            username = user_data.get("name", "") or user_data.get("id", "")
+            password = user_data.get("password", "")
+        else:
+            # Try to extract from top-level auth object
+            username = identity.get("user", {}).get("name", "") or identity.get("user", {}).get("id", "")
+            password = identity.get("user", {}).get("password", "")
+        
+        # If we still don't have username/password, check for simple format
+        if not username and not password:
+            # Check for simpler format that might be used by CLI tools
+            username = identity.get("name", "") or identity.get("user", {}).get("name", "")
+            password = identity.get("password", "") or identity.get("user", {}).get("password", "")
+
+    # Validate that we have both username and password
+    if not username or not password:
+        return jsonify({"error": {"message": "Username and password must not be empty", "code": 400}}), 400
 
     try:
         token = sim.auth_manager.authenticate(username, password)
@@ -75,7 +96,7 @@ def create_token():
 
     response_body = {
         "token": {
-            "methods": methods,
+            "methods": methods if methods else ["password"],  # Ensure methods are included even if not explicitly provided
             "user": {
                 "domain": {"id": domain_id, "name": domain_name},
                 "id": _generate_id(),
