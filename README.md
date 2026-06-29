@@ -108,7 +108,8 @@ cp deploy/clouds.yaml ~/.config/openstack/clouds.yaml
 ```bash
 # Set the cloud (or pass --os-cloud simulator to each command)
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
-export OS_AUTH_URL=http://localhost:5000/identity/v3
+# OS_AUTH_URL has to point to the Openstack Simulator http://opcp-psmc.com:6124/identity/v3
+export OS_AUTH_URL=http://opcp-psmc.com:6124/identity/v3
 export OS_APPLICATION_CREDENTIAL_ID=simulator-app-credential
 export OS_APPLICATION_CREDENTIAL_SECRET=simulator-secret
 export OS_REGION_NAME=RegionOne
