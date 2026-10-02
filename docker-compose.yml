@@ -22,7 +22,7 @@ services:
       retries: 3
       start_period: 40s
 
- frontend-component:
+  frontend-component:
     image: nginx:alpine
     container_name: opcp-openstack-simulator-front-component-${USER_ID:-0}-${HTTPS_PORT:-5001}
     ports:
