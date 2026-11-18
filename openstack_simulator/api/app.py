@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import markdown
@@ -122,7 +123,33 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
             border: none;
             padding: 0;
             color: inherit;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
         }
+        .code-block { position: relative; }
+        .code-block pre { margin: 1rem 0; }
+        .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            padding: 0.2rem 0.6rem;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            color: #fff;
+            background: rgba(30, 30, 30, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 4px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .code-block:hover .copy-btn,
+        .copy-btn:focus,
+        .copy-btn.copied { opacity: 1; }
+        @media (hover: none) {
+            .copy-btn { opacity: 0.8; }
+        }
+        .copy-btn.copied { background: rgba(40, 167, 69, 0.9); }
+        .code-comment { font-size: 0.85em; font-style: italic; color: #6a9955; }
         table {
             border-collapse: collapse;
             width: 100%;
@@ -161,8 +188,132 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
             OpenStack Simulator &mdash; In-memory training environment
         </div>
     </div>
+    <script>
+    (function () {
+        function fallbackCopy(text) {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.top = '-1000px';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch (e) {}
+            document.body.removeChild(ta);
+        }
+        function showCopied(btn) {
+            btn.textContent = 'Copied';
+            btn.classList.add('copied');
+            setTimeout(function () {
+                btn.textContent = 'Copy';
+                btn.classList.remove('copied');
+            }, 1500);
+        }
+        document.addEventListener('click', function (event) {
+            var btn = event.target.closest ? event.target.closest('.copy-btn') : null;
+            if (!btn) { return; }
+            var pre = btn.parentElement.querySelector('pre');
+            if (!pre) { return; }
+            var text = pre.textContent;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function () {
+                    showCopied(btn);
+                }, function () {
+                    fallbackCopy(text);
+                    showCopied(btn);
+                });
+            } else {
+                fallbackCopy(text);
+                showCopied(btn);
+            }
+        });
+    })();
+    </script>
 </body>
 </html>"""
+
+_FENCE_OPEN_RE = re.compile(r"^([ \t]+)(`{3,}|~{3,})(.*)$")
+
+
+def _dedent_fences(md: str) -> str:
+    """Remove indentation from indented fenced code blocks.
+
+    Fences opened with leading whitespace (e.g. inside list items) are
+    emitted at column 0, with their content dedented by the same amount,
+    and a blank line is ensured before the opening fence.
+    """
+    out: list[str] = []
+    in_fence = False
+    indent = ""
+    marker = ""
+    for line in md.split("\n"):
+        if not in_fence:
+            m = _FENCE_OPEN_RE.match(line)
+            if m:
+                indent, marker = m.group(1), m.group(2)
+                in_fence = True
+                if out and out[-1].strip() != "":
+                    out.append("")
+                out.append(marker + m.group(3))
+            else:
+                out.append(line)
+            continue
+        if line.strip() == "":
+            out.append(line)
+            continue
+        if line.startswith(indent):
+            stripped = line[len(indent):]
+        else:
+            stripped = line.lstrip(" \t")
+        if line.lstrip(" \t").startswith(marker):
+            in_fence = False
+            out.append(stripped)
+            continue
+        out.append(stripped)
+    return "\n".join(out)
+
+
+_PRE_BLOCK_RE = re.compile(r"<pre\b.*?</pre>", re.DOTALL)
+_PRE_PARTS_RE = re.compile(
+    r"^(<pre\b[^>]*>(?:<span></span>)?(?:<code\b[^>]*>)?)(.*?)((?:</code>)?</pre>)$",
+    re.DOTALL,
+)
+_TAG_RE = re.compile(r"<[^>]+>")
+_COPY_BUTTON = '<button type="button" class="copy-btn" aria-label="Copy code">Copy</button>'
+
+
+def _wrap_comment_line(line: str) -> str:
+    """Wrap a line whose visible text starts with '#' in span.code-comment.
+
+    Highlighter spans inside the line are kept and nested. Lines with
+    unbalanced <span> tags (a span crossing lines) are left untouched so the
+    result stays well-formed.
+    """
+    if line.count("<span") != line.count("</span>"):
+        return line
+    if not _TAG_RE.sub("", line).lstrip(" \t").startswith("#"):
+        return line
+    content = line.lstrip(" \t")
+    indent = line[: len(line) - len(content)]
+    if content.startswith("<") and not content.startswith("<span"):
+        return line
+    return f'{indent}<span class="code-comment">{content}</span>'
+
+
+def _decorate_code_blocks(html: str) -> str:
+    """Mark '#' comment lines and add a copy button wrapper around each <pre>."""
+
+    def _decorate(match: re.Match) -> str:
+        block = match.group(0)
+        parts = _PRE_PARTS_RE.match(block)
+        if parts:
+            head, body, tail = parts.groups()
+            body = "\n".join(_wrap_comment_line(l) for l in body.split("\n"))
+            block = head + body + tail
+        return f'<div class="code-block">{_COPY_BUTTON}{block}</div>'
+
+    return _PRE_BLOCK_RE.sub(_decorate, html)
+
 
 def _render_readme() -> str:
     """Render README.md as a styled HTML page."""
@@ -202,9 +353,12 @@ def _render_readme() -> str:
     )
     md_content = md_content.replace("http://localhost:5000", base_url)
 
+    md_content = _dedent_fences(md_content)
+
     html_body = markdown.markdown(
         md_content,
         extensions=["tables", "fenced_code", "codehilite", "toc"],
     )
+    html_body = _decorate_code_blocks(html_body)
 
     return _HTML_TEMPLATE.replace("{{content}}", html_body)
