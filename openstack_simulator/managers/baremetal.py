@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from openstack_simulator.exceptions import (
     DuplicateResourceError,
+    InvalidPatchError,
     InvalidStateError,
     ResourceNotFoundError,
 )
@@ -16,6 +18,17 @@ from openstack_simulator.models import BaremetalNode, BaremetalPort
 if TYPE_CHECKING:
     from openstack_simulator.limiter import ResourceLimiter
     from openstack_simulator.store import ResourceStore
+
+
+PATCH_OPS = {"add", "replace", "remove"}
+NESTED_DICT_ROOTS = {"properties", "driver_info"}
+SCALAR_PATHS = {
+    "/driver": "driver",
+    "/memory_mb": "memory_mb",
+    "/cpus": "cpus",
+    "/local_gb": "local_gb",
+    "/cpu_arch": "cpu_arch",
+}
 
 
 class BaremetalManager:
@@ -115,6 +128,139 @@ class BaremetalManager:
         # If name changed, re-key in the store
         if new_name is not None and new_name != node_name:
             # Remove old entry and add with new name
+            del self.store.baremetal_nodes[node_name]
+            self.store.add("baremetal_nodes", new_name, node)
+
+        return node
+
+    @staticmethod
+    def _split_patch_path(path: str) -> list[str]:
+        """Split a JSON Pointer into decoded segments."""
+        if not path.startswith("/"):
+            raise InvalidPatchError(f"Unsupported patch path '{path}'")
+        return [
+            seg.replace("~1", "/").replace("~0", "~")
+            for seg in path[1:].split("/")
+        ]
+
+    @staticmethod
+    def _patch_nested(
+        root: dict, keys: list[str], op: str, value, path: str
+    ) -> None:
+        """Apply add/replace/remove at a nested location inside ``root``."""
+        if any(k == "" for k in keys):
+            raise InvalidPatchError(f"Empty key in patch path '{path}'")
+        target = root
+        for key in keys[:-1]:
+            nxt = target.get(key)
+            if nxt is None and key not in target:
+                if op != "add":
+                    raise InvalidPatchError(
+                        f"Path '{path}' does not exist"
+                    )
+                nxt = {}
+                target[key] = nxt
+            if not isinstance(nxt, dict):
+                raise InvalidPatchError(
+                    f"Path '{path}' traverses a non-dictionary value"
+                )
+            target = nxt
+        last = keys[-1]
+        if op == "remove":
+            if last not in target:
+                raise InvalidPatchError(f"Cannot remove missing key '{path}'")
+            del target[last]
+        else:
+            target[last] = copy.deepcopy(value)
+
+    def patch_node(self, node_name: str, operations: list) -> BaremetalNode:
+        """Apply a JSON Patch atomically to a node.
+
+        Raises:
+            ResourceNotFoundError: If node not found.
+            InvalidPatchError: Bad op, unsupported path, malformed operation,
+                or removal of a missing key.
+            DuplicateResourceError: If a rename collides with another node.
+        """
+        node = self.store.get("baremetal_nodes", node_name)
+        if node is None:
+            raise ResourceNotFoundError(
+                f"Baremetal node '{node_name}' not found"
+            )
+        if not isinstance(operations, list):
+            raise InvalidPatchError("Patch body must be a list of operations")
+
+        work = {
+            "name": node.name,
+            "driver": node.driver,
+            "memory_mb": node.memory_mb,
+            "cpus": node.cpus,
+            "local_gb": node.local_gb,
+            "cpu_arch": node.cpu_arch,
+            "properties": copy.deepcopy(node.properties),
+            "driver_info": copy.deepcopy(node.driver_info),
+            "extra": copy.deepcopy(node.extra),
+        }
+
+        for operation in operations:
+            if not isinstance(operation, dict):
+                raise InvalidPatchError("Patch operation must be an object")
+            op = operation.get("op")
+            path = operation.get("path")
+            if not isinstance(op, str) or not isinstance(path, str):
+                raise InvalidPatchError(
+                    "Patch operation requires string 'op' and 'path'"
+                )
+            if op not in PATCH_OPS:
+                raise InvalidPatchError(f"Unsupported patch op '{op}'")
+            if op != "remove" and "value" not in operation:
+                raise InvalidPatchError(
+                    f"Patch op '{op}' on '{path}' requires 'value'"
+                )
+            value = operation.get("value")
+
+            segments = self._split_patch_path(path)
+            root = segments[0]
+
+            if path in SCALAR_PATHS:
+                if op == "remove":
+                    raise InvalidPatchError(f"Cannot remove '{path}'")
+                work[SCALAR_PATHS[path]] = value
+            elif path == "/name":
+                if op == "remove":
+                    raise InvalidPatchError("Cannot remove '/name'")
+                if not isinstance(value, str) or not value:
+                    raise InvalidPatchError(
+                        "'/name' value must be a non-empty string"
+                    )
+                work["name"] = value
+            elif root in NESTED_DICT_ROOTS and len(segments) == 2:
+                self._patch_nested(work[root], segments[1:], op, value, path)
+            elif root == "extra" and len(segments) == 1:
+                if op == "remove":
+                    raise InvalidPatchError("Cannot remove '/extra'")
+                if not isinstance(value, dict):
+                    raise InvalidPatchError(
+                        "'/extra' value must be a dictionary"
+                    )
+                work["extra"] = copy.deepcopy(value)
+            elif root == "extra":
+                self._patch_nested(work["extra"], segments[1:], op, value, path)
+            else:
+                raise InvalidPatchError(f"Unsupported patch path '{path}'")
+
+        new_name = work["name"]
+        renamed = new_name != node_name
+        if renamed and self.store.get("baremetal_nodes", new_name) is not None:
+            raise DuplicateResourceError(
+                f"Baremetal node '{new_name}' already exists"
+            )
+
+        for key, val in work.items():
+            setattr(node, key, val)
+        node.updated_at = datetime.now(timezone.utc).isoformat()
+
+        if renamed:
             del self.store.baremetal_nodes[node_name]
             self.store.add("baremetal_nodes", new_name, node)
 

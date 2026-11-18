@@ -184,3 +184,45 @@ def check_token():
         return "", 404
 
     return "", 200
+
+
+def _project_dict(base_url: str) -> dict:
+    """Build the single simulator project from config values."""
+    project_id = current_app.config["PROJECT_ID"]
+    domain_id = current_app.config["DOMAIN_ID"]
+    return {
+        "id": project_id,
+        "name": "simulator-project",
+        "domain_id": domain_id,
+        "enabled": True,
+        "description": "",
+        "parent_id": domain_id,
+        "is_domain": False,
+        "links": {"self": f"{base_url}/identity/v3/projects/{project_id}"},
+    }
+
+
+@identity_bp.route("/v3/projects", methods=["GET"])
+@require_token
+def list_projects():
+    """List projects (always the single simulator project)."""
+    base_url = get_base_url()
+    return jsonify({
+        "projects": [_project_dict(base_url)],
+        "links": {
+            "self": f"{base_url}/identity/v3/projects",
+            "previous": None,
+            "next": None,
+        },
+    })
+
+
+@identity_bp.route("/v3/projects/<project_id>", methods=["GET"])
+@require_token
+def get_project(project_id):
+    """Show the simulator project; 404 for any other id."""
+    if project_id != current_app.config["PROJECT_ID"]:
+        return jsonify({
+            "error": {"message": f"Could not find project: {project_id}", "code": 404}
+        }), 404
+    return jsonify({"project": _project_dict(get_base_url())})

@@ -7,12 +7,27 @@ from flask import Blueprint, request, jsonify
 from openstack_simulator.api.helpers import get_simulator, require_token
 from openstack_simulator.exceptions import (
     DuplicateResourceError,
+    InvalidPatchError,
     InvalidStateError,
     ResourceLimitExceededError,
     ResourceNotFoundError,
 )
 
 baremetal_bp = Blueprint("baremetal", __name__, url_prefix="/baremetal/v1")
+
+VALIDATE_INTERFACES = (
+    "bios",
+    "boot",
+    "console",
+    "deploy",
+    "inspect",
+    "management",
+    "network",
+    "power",
+    "raid",
+    "rescue",
+    "storage",
+)
 
 
 # --- Node endpoints ---
@@ -61,6 +76,42 @@ def create_node():
     return jsonify(node.to_dict()), 201
 
 
+@baremetal_bp.route("/nodes/detail", methods=["GET"])
+@require_token
+def list_nodes_detail():
+    """List all active baremetal nodes with full detail."""
+    sim = get_simulator()
+    nodes = sim.baremetal_manager.list_nodes()
+    return jsonify({"nodes": [n.to_dict() for n in nodes]})
+
+
+@baremetal_bp.route("/nodes/<node_ident>/validate", methods=["GET"])
+@require_token
+def validate_node(node_ident: str):
+    """Validate a baremetal node's interfaces (always succeeds)."""
+    sim = get_simulator()
+    node = _find_node(sim, node_ident)
+    if node is None:
+        return jsonify({"error": {"message": f"Node {node_ident} not found", "code": 404}}), 404
+
+    return jsonify({
+        iface: {"result": True, "reason": None} for iface in VALIDATE_INTERFACES
+    })
+
+
+@baremetal_bp.route("/nodes/<node_ident>/ports", methods=["GET"])
+@require_token
+def list_node_ports(node_ident: str):
+    """List ports belonging to a baremetal node."""
+    sim = get_simulator()
+    node = _find_node(sim, node_ident)
+    if node is None:
+        return jsonify({"error": {"message": f"Node {node_ident} not found", "code": 404}}), 404
+
+    ports = sim.baremetal_manager.list_ports(node_id=node.id)
+    return jsonify({"ports": [p.to_dict() for p in ports]})
+
+
 @baremetal_bp.route("/nodes/<node_ident>", methods=["GET"])
 @require_token
 def get_node(node_ident: str):
@@ -82,10 +133,19 @@ def update_node(node_ident: str):
     if node is None:
         return jsonify({"error": {"message": f"Node {node_ident} not found", "code": 404}}), 404
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        data = {}
 
     try:
-        updated_node = sim.baremetal_manager.update_node(node.name, **data)
+        if isinstance(data, list):
+            updated_node = sim.baremetal_manager.patch_node(node.name, data)
+        elif isinstance(data, dict):
+            updated_node = sim.baremetal_manager.update_node(node.name, **data)
+        else:
+            raise InvalidPatchError("Patch body must be a list of operations")
+    except InvalidPatchError as e:
+        return jsonify({"error": {"message": str(e), "code": 400}}), 400
     except ResourceNotFoundError as e:
         return jsonify({"error": {"message": str(e), "code": 404}}), 404
     except DuplicateResourceError as e:
@@ -168,6 +228,16 @@ def set_provision_state(node_ident: str):
 @require_token
 def list_ports():
     """List all active baremetal ports, optionally filtered by node_id."""
+    sim = get_simulator()
+    node_id = request.args.get("node_id")
+    ports = sim.baremetal_manager.list_ports(node_id=node_id)
+    return jsonify({"ports": [p.to_dict() for p in ports]})
+
+
+@baremetal_bp.route("/ports/detail", methods=["GET"])
+@require_token
+def list_ports_detail():
+    """List all active baremetal ports with detail, optionally filtered by node_id."""
     sim = get_simulator()
     node_id = request.args.get("node_id")
     ports = sim.baremetal_manager.list_ports(node_id=node_id)

@@ -6,6 +6,7 @@ for serialization round-trips.
 
 from __future__ import annotations
 
+import copy
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -342,6 +343,7 @@ class BaremetalNode:
     cpu_arch: str
     driver_info: dict = field(default_factory=dict)
     properties: dict = field(default_factory=dict)
+    extra: dict = field(default_factory=dict)
     status: str = "ACTIVE"
     created_at: str = ""
     updated_at: str = ""
@@ -359,6 +361,7 @@ class BaremetalNode:
             "cpu_arch": self.cpu_arch,
             "driver_info": dict(self.driver_info),
             "properties": dict(self.properties),
+            "extra": copy.deepcopy(self.extra),
             "status": self.status,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -378,6 +381,7 @@ class BaremetalNode:
             cpu_arch=data["cpu_arch"],
             driver_info=dict(data.get("driver_info", {})),
             properties=dict(data.get("properties", {})),
+            extra=copy.deepcopy(data.get("extra", {})),
             status=data.get("status", "ACTIVE"),
             created_at=data.get("created_at", ""),
             updated_at=data.get("updated_at", ""),

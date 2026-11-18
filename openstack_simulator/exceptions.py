@@ -49,3 +49,10 @@ class InvalidStateError(SimulatorError):
 
     def __init__(self, message: str = "Invalid state for this operation"):
         super().__init__(message)
+
+
+class InvalidPatchError(SimulatorError):
+    """Raised when a JSON Patch operation is malformed or unsupported."""
+
+    def __init__(self, message: str = "Invalid JSON patch"):
+        super().__init__(message)
