@@ -634,3 +634,54 @@ class Flavor:
             is_public=data.get("is_public", True),
             access=set(data.get("access", [])),
         )
+
+
+@dataclass
+class Image:
+    """Simulated Glance image (metadata only, no image data)."""
+
+    id: str
+    name: str | None
+    status: str
+    visibility: str = "private"
+    size: int = 0
+    disk_format: str | None = None
+    container_format: str | None = None
+    min_disk: int = 0
+    min_ram: int = 0
+    tags: list[str] = field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "status": self.status,
+            "visibility": self.visibility,
+            "size": self.size,
+            "disk_format": self.disk_format,
+            "container_format": self.container_format,
+            "min_disk": self.min_disk,
+            "min_ram": self.min_ram,
+            "tags": list(self.tags),
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Image:
+        return cls(
+            id=data["id"],
+            name=data.get("name"),
+            status=data["status"],
+            visibility=data.get("visibility", "private"),
+            size=data.get("size", 0),
+            disk_format=data.get("disk_format"),
+            container_format=data.get("container_format"),
+            min_disk=data.get("min_disk", 0),
+            min_ram=data.get("min_ram", 0),
+            tags=list(data.get("tags", [])),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
+        )

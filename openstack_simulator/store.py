@@ -9,6 +9,7 @@ from openstack_simulator.models import (
     BaremetalPort,
     Bond,
     Flavor,
+    Image,
     Instance,
     Network,
     PendingTransition,
@@ -43,6 +44,7 @@ class ResourceStore:
         self.flavor_access: dict[str, set[str]] = {}
         self.pending: dict[str, PendingTransition] = {}
         self.server_groups: dict[str, Any] = {}
+        self.images: dict[str, Image] = {}
         self._seed_flavors()
 
     def _seed_flavors(self) -> None:
@@ -91,6 +93,25 @@ class ResourceStore:
         resource = store.get(name)
         if resource is not None:
             resource.status = "DELETED"
+
+    def remove(self, resource_type: str, key: str) -> bool:
+        """Remove a resource entry. Return True if it existed."""
+        store = getattr(self, resource_type)
+        if key in store:
+            del store[key]
+            return True
+        return False
+
+    def clear(self) -> None:
+        """Empty every collection in place, keeping the store object identity.
+
+        The static m1.* flavors are seeded again so the store returns to its
+        initial state.
+        """
+        for value in vars(self).values():
+            if isinstance(value, (dict, list)):
+                value.clear()
+        self._seed_flavors()
 
     def count_active(self, resource_type: str) -> int:
         """Count non-deleted resources of the given type."""

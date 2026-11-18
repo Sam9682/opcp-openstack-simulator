@@ -11,6 +11,7 @@ from openstack_simulator.limiter import ResourceLimiter
 from openstack_simulator.managers.auth import AuthManager
 from openstack_simulator.managers.baremetal import BaremetalManager
 from openstack_simulator.managers.compute import ComputeManager
+from openstack_simulator.managers.image import ImageManager
 from openstack_simulator.managers.image_lookup import ImageLookup
 from openstack_simulator.managers.network import NetworkManager
 from openstack_simulator.managers.node_service import NodeService
@@ -176,7 +177,15 @@ class Simulator:
             node_service=self.node_service,
             clock=self.clock,
         )
+        self.image_manager = ImageManager(store=self.store)
+        self.image_manager.seed_predefined()
         self.resync_traits()
+
+    def reset(self) -> None:
+        """Clear the store in place and seed the predefined images again."""
+        with self.lock:
+            self.store.clear()
+            self.image_manager.seed_predefined()
 
     def resync_traits(self) -> None:
         """Create missing placement providers and make their traits match
