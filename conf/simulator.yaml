@@ -1,0 +1,26 @@
+simulator:
+  time_scale: 1.0
+  strict_mode: true
+  seed: 42
+timings_seconds:
+  enroll_to_verifying: 2
+  verifying_to_manageable: 5
+  cleaning: 30
+  deploy: 45
+  undeploy: 5
+  cleaning_after_delete: 30
+  power: 3
+  inspect: 10
+guards:
+  require_resource_class: true
+  require_trait_extra_spec_value: true
+  enforce_owner: true
+  enforce_lessee: true
+  enforce_conductor: true
+  enforce_pxe_port: true
+  enforce_cpu_arch: true
+  enforce_quota: true
+features:
+  microversion_traits_field: true
+  protected_field: false
+  deleting_state: true

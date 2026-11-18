@@ -18,7 +18,7 @@ from openstack_simulator.limiter import ResourceLimiter
 @pytest.fixture
 def simulator():
     """Return a fresh Simulator instance with default config."""
-    return Simulator()
+    return Simulator(config={"time_scale": 0})
 
 
 @pytest.fixture

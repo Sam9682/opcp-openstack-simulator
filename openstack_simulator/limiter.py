@@ -34,6 +34,10 @@ class ResourceLimiter:
                 f"{resource_type} limit ({limit}) reached"
             )
 
+    def project_limit(self, resource: str) -> int | None:
+        """Return the per-project Quota value for ``resource``, or None (no limit)."""
+        return self.limits.get(resource)
+
     def get_limit(self, resource_type: str) -> int:
         """Return the configured limit for a resource type, or 0 if not configured."""
         return self.limits.get(resource_type, 0)

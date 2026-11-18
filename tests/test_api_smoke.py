@@ -9,7 +9,7 @@ from openstack_simulator.api.app import create_app
 @pytest.fixture
 def client():
     """Create a Flask test client."""
-    app = create_app()
+    app = create_app({"time_scale": 0})
     app.config["TESTING"] = True
     with app.test_client() as client:
         yield client

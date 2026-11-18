@@ -8,8 +8,10 @@ from openstack_simulator.models import (
     BaremetalNode,
     BaremetalPort,
     Bond,
+    Flavor,
     Instance,
     Network,
+    PendingTransition,
     Port,
     Router,
     SecurityGroup,
@@ -36,6 +38,25 @@ class ResourceStore:
         self.snapshots: list[Snapshot] = []
         self.baremetal_nodes: dict[str, BaremetalNode] = {}
         self.baremetal_ports: dict[str, BaremetalPort] = {}
+        self.flavors: dict[str, Flavor] = {}
+        self.keypairs: dict[str, Any] = {}
+        self.flavor_access: dict[str, set[str]] = {}
+        self.pending: dict[str, PendingTransition] = {}
+        self.server_groups: dict[str, Any] = {}
+        self._seed_flavors()
+
+    def _seed_flavors(self) -> None:
+        """Seed static m1.* flavors (no resources: extra spec, legacy path)."""
+        for name, ram, vcpus, disk in (
+            ("m1.tiny", 512, 1, 1),
+            ("m1.small", 2048, 1, 20),
+            ("m1.medium", 4096, 2, 40),
+            ("m1.large", 8192, 4, 80),
+            ("m1.xlarge", 16384, 8, 160),
+        ):
+            self.flavors[name] = Flavor(
+                id=name, name=name, vcpus=vcpus, ram=ram, disk=disk
+            )
 
     def add(self, resource_type: str, name: str, resource: Any) -> None:
         """Store a resource by type and name."""

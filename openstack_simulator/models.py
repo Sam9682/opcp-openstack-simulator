@@ -10,6 +10,9 @@ import copy
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Literal
+
+FAKE_PROJECT_ID = "fake-project-id-00000000001"
 
 
 def _generate_id() -> str:
@@ -30,6 +33,8 @@ class Token:
     username: str
     issued_at: str
     expires_at: str
+    project_id: str | None = FAKE_PROJECT_ID
+    roles: list[str] = field(default_factory=lambda: ["admin"])
 
     def to_dict(self) -> dict:
         return {
@@ -37,6 +42,8 @@ class Token:
             "username": self.username,
             "issued_at": self.issued_at,
             "expires_at": self.expires_at,
+            "project_id": self.project_id,
+            "roles": list(self.roles),
         }
 
     @classmethod
@@ -46,6 +53,8 @@ class Token:
             username=data["username"],
             issued_at=data["issued_at"],
             expires_at=data["expires_at"],
+            project_id=data.get("project_id", FAKE_PROJECT_ID),
+            roles=list(data.get("roles", ["admin"])),
         )
 
 
@@ -59,6 +68,15 @@ class Instance:
     image: str
     status: str
     created_at: str
+    project_id: str | None = None
+    node_id: str | None = None
+    task_state: str | None = None
+    fault: dict | None = None
+    flavor_vcpus: int | None = None
+    flavor_ram: int | None = None
+    flavor_disk: int | None = None
+    availability_zone: str | None = None
+    traits: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -68,6 +86,15 @@ class Instance:
             "image": self.image,
             "status": self.status,
             "created_at": self.created_at,
+            "project_id": self.project_id,
+            "node_id": self.node_id,
+            "task_state": self.task_state,
+            "fault": copy.deepcopy(self.fault),
+            "flavor_vcpus": self.flavor_vcpus,
+            "flavor_ram": self.flavor_ram,
+            "flavor_disk": self.flavor_disk,
+            "availability_zone": self.availability_zone,
+            "traits": list(self.traits),
         }
 
     @classmethod
@@ -79,6 +106,15 @@ class Instance:
             image=data["image"],
             status=data["status"],
             created_at=data["created_at"],
+            project_id=data.get("project_id"),
+            node_id=data.get("node_id"),
+            task_state=data.get("task_state"),
+            fault=copy.deepcopy(data.get("fault")),
+            flavor_vcpus=data.get("flavor_vcpus"),
+            flavor_ram=data.get("flavor_ram"),
+            flavor_disk=data.get("flavor_disk"),
+            availability_zone=data.get("availability_zone"),
+            traits=list(data.get("traits", [])),
         )
 
 
@@ -347,6 +383,21 @@ class BaremetalNode:
     status: str = "ACTIVE"
     created_at: str = ""
     updated_at: str = ""
+    target_provision_state: str | None = None
+    maintenance: bool = False
+    maintenance_reason: str | None = None
+    instance_uuid: str | None = None
+    owner: str | None = None
+    lessee: str | None = None
+    conductor: str | None = "sim-conductor-1"
+    last_error: str | None = None
+    resource_class: str | None = None
+    traits: list[str] = field(default_factory=list)
+    protected: bool = False
+    network_interface: str = "neutron"
+    raid_interface: str = "agent"
+    target_raid_config: dict | None = None
+    provision_updated_at: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -365,6 +416,21 @@ class BaremetalNode:
             "status": self.status,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "target_provision_state": self.target_provision_state,
+            "maintenance": self.maintenance,
+            "maintenance_reason": self.maintenance_reason,
+            "instance_uuid": self.instance_uuid,
+            "owner": self.owner,
+            "lessee": self.lessee,
+            "conductor": self.conductor,
+            "last_error": self.last_error,
+            "resource_class": self.resource_class,
+            "traits": list(self.traits),
+            "protected": self.protected,
+            "network_interface": self.network_interface,
+            "raid_interface": self.raid_interface,
+            "target_raid_config": copy.deepcopy(self.target_raid_config),
+            "provision_updated_at": self.provision_updated_at,
         }
 
     @classmethod
@@ -385,6 +451,21 @@ class BaremetalNode:
             status=data.get("status", "ACTIVE"),
             created_at=data.get("created_at", ""),
             updated_at=data.get("updated_at", ""),
+            target_provision_state=data.get("target_provision_state"),
+            maintenance=data.get("maintenance", False),
+            maintenance_reason=data.get("maintenance_reason"),
+            instance_uuid=data.get("instance_uuid"),
+            owner=data.get("owner"),
+            lessee=data.get("lessee"),
+            conductor=data.get("conductor", "sim-conductor-1"),
+            last_error=data.get("last_error"),
+            resource_class=data.get("resource_class"),
+            traits=list(data.get("traits", [])),
+            protected=data.get("protected", False),
+            network_interface=data.get("network_interface", "neutron"),
+            raid_interface=data.get("raid_interface", "agent"),
+            target_raid_config=copy.deepcopy(data.get("target_raid_config")),
+            provision_updated_at=data.get("provision_updated_at"),
         )
 
 
@@ -427,6 +508,8 @@ class BaremetalPort:
     address: str  # MAC address
     status: str = "ACTIVE"
     created_at: str = ""
+    pxe_enabled: bool = True
+    vif_bind_ok: bool = True
 
     def to_dict(self) -> dict:
         return {
@@ -435,6 +518,8 @@ class BaremetalPort:
             "address": self.address,
             "status": self.status,
             "created_at": self.created_at,
+            "pxe_enabled": self.pxe_enabled,
+            "vif_bind_ok": self.vif_bind_ok,
         }
 
     @classmethod
@@ -445,4 +530,107 @@ class BaremetalPort:
             address=data["address"],
             status=data.get("status", "ACTIVE"),
             created_at=data.get("created_at", ""),
+            pxe_enabled=data.get("pxe_enabled", True),
+            vif_bind_ok=data.get("vif_bind_ok", True),
+        )
+
+
+StepKind = Literal[
+    "verifying",
+    "manageable",
+    "cleaning",
+    "available",
+    "inspecting",
+    "deploying",
+    "active",
+    "deleting",
+    "deploy_failed",
+    "clean_failed",
+]
+
+
+@dataclass(frozen=True)
+class Step:
+    """One scheduled provision-state change (due_at is virtual-clock seconds)."""
+
+    to_state: str
+    due_at: float
+    kind: StepKind
+
+    def to_dict(self) -> dict:
+        return {"to_state": self.to_state, "due_at": self.due_at, "kind": self.kind}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Step:
+        return cls(
+            to_state=data["to_state"], due_at=data["due_at"], kind=data["kind"]
+        )
+
+
+@dataclass
+class PendingTransition:
+    """Ordered steps still to be applied to a baremetal node."""
+
+    node_id: str
+    steps: list[Step]
+    verb: str
+    final_state: str
+    server_id: str | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "node_id": self.node_id,
+            "steps": [s.to_dict() for s in self.steps],
+            "verb": self.verb,
+            "final_state": self.final_state,
+            "server_id": self.server_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> PendingTransition:
+        return cls(
+            node_id=data["node_id"],
+            steps=[Step.from_dict(s) for s in data.get("steps", [])],
+            verb=data["verb"],
+            final_state=data["final_state"],
+            server_id=data.get("server_id"),
+        )
+
+
+@dataclass
+class Flavor:
+    """Simulated Nova flavor."""
+
+    id: str
+    name: str
+    vcpus: int
+    ram: int
+    disk: int
+    extra_specs: dict[str, str] = field(default_factory=dict)
+    is_public: bool = True
+    access: set[str] = field(default_factory=set)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "vcpus": self.vcpus,
+            "ram": self.ram,
+            "disk": self.disk,
+            "extra_specs": dict(self.extra_specs),
+            "is_public": self.is_public,
+            "access": sorted(self.access),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Flavor:
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            vcpus=data["vcpus"],
+            ram=data["ram"],
+            disk=data["disk"],
+            extra_specs=dict(data.get("extra_specs", {})),
+            is_public=data.get("is_public", True),
+            access=set(data.get("access", [])),
         )

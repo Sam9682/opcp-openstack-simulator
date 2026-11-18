@@ -16,6 +16,8 @@ from openstack_simulator.api.network import network_bp
 from openstack_simulator.api.volume import volume_bp
 from openstack_simulator.api.baremetal import baremetal_bp
 from openstack_simulator.api.image import image_bp
+from openstack_simulator.api.sim_control import sim_control_bp
+from openstack_simulator.api.helpers import register_error_handlers
 
 
 def create_app(config: dict | None = None) -> Flask:
@@ -40,6 +42,8 @@ def create_app(config: dict | None = None) -> Flask:
     app.config["DOMAIN_NAME"] = "Default"
     app.config["REGION"] = "RegionOne"
 
+    register_error_handlers(app)
+
     # Register blueprints for each OpenStack service
     app.register_blueprint(identity_bp)
     app.register_blueprint(compute_bp)
@@ -47,6 +51,7 @@ def create_app(config: dict | None = None) -> Flask:
     app.register_blueprint(volume_bp)
     app.register_blueprint(baremetal_bp)
     app.register_blueprint(image_bp)
+    app.register_blueprint(sim_control_bp)
 
     # Health check endpoint
     @app.route("/health", methods=["GET"])

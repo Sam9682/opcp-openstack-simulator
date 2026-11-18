@@ -3,15 +3,24 @@
 from __future__ import annotations
 
 import configparser
+import threading
 from pathlib import Path
 
+from openstack_simulator.clock import Clock
 from openstack_simulator.limiter import ResourceLimiter
 from openstack_simulator.managers.auth import AuthManager
 from openstack_simulator.managers.baremetal import BaremetalManager
 from openstack_simulator.managers.compute import ComputeManager
+from openstack_simulator.managers.image_lookup import ImageLookup
 from openstack_simulator.managers.network import NetworkManager
+from openstack_simulator.managers.node_service import NodeService
+from openstack_simulator.managers.placement import PlacementService
+from openstack_simulator.managers.quota import QuotaManager
 from openstack_simulator.managers.security_group import SecurityGroupManager
+from openstack_simulator.managers.server_service import ServerCreationService
+from openstack_simulator.managers.transitions import FailureInjector
 from openstack_simulator.managers.volume import VolumeManager
+from openstack_simulator.sim_config import load_sim_config
 from openstack_simulator.store import ResourceStore
 
 DEFAULT_CONFIG: dict[str, object] = {
@@ -34,6 +43,20 @@ _LIMITS_INI_MAP: dict[str, str] = {
     "volume.max_volumes": "max_volumes",
     "baremetal.max_baremetal_nodes": "max_baremetal_nodes",
     "baremetal.max_baremetal_ports": "max_baremetal_ports",
+    "compute.max_cores": "max_cores",
+    "compute.max_ram": "max_ram",
+    "compute.max_key_pairs": "max_key_pairs",
+    "compute.max_server_groups": "max_server_groups",
+    "compute.max_server_group_members": "max_server_group_members",
+}
+
+# Optional Quota keys: absent means no limit (Req 18.8).
+_OPTIONAL_QUOTAS: dict[str, str] = {
+    "max_cores": "cores",
+    "max_ram": "ram",
+    "max_key_pairs": "key_pairs",
+    "max_server_groups": "server_groups",
+    "max_server_group_members": "server_group_members",
 }
 
 
@@ -89,6 +112,10 @@ class Simulator:
         if config:
             self.config.update(config)
 
+        # Sim_Config (constructor config dict wins over the file); a
+        # ConfigError propagates and fails startup.
+        self.sim_config = load_sim_config(overrides=config)
+
         self.store = ResourceStore()
 
         self.limiter = ResourceLimiter(
@@ -102,6 +129,37 @@ class Simulator:
             }
         )
 
+        limits = self.limiter.limits
+        for cfg_key, quota in _OPTIONAL_QUOTAS.items():
+            if cfg_key in self.config:
+                limits[quota] = int(self.config[cfg_key])
+
+        self.clock = Clock()
+        self.lock = threading.RLock()
+        self.failures = FailureInjector()
+        self.placement = PlacementService(lock=self.lock)
+        self.images = ImageLookup(self.store)
+        self.node_service = NodeService(
+            self.store,
+            self.sim_config,
+            self.placement,
+            failures=self.failures,
+            lock=self.lock,
+            images=self.images,
+        )
+        self.quota_manager = QuotaManager(
+            self.store, self.limiter, self.sim_config
+        )
+        self.server_service = ServerCreationService(
+            self.store,
+            self.sim_config,
+            self.placement,
+            self.node_service,
+            self.quota_manager,
+            self.images,
+            lock=self.lock,
+        )
+
         self.auth_manager = AuthManager(
             store=self.store,
             session_timeout=int(self.config["session_timeout"]),
@@ -112,4 +170,19 @@ class Simulator:
         self.security_group_manager = SecurityGroupManager(
             store=self.store, limiter=self.limiter
         )
-        self.baremetal_manager = BaremetalManager(store=self.store, limiter=self.limiter)
+        self.baremetal_manager = BaremetalManager(
+            store=self.store,
+            limiter=self.limiter,
+            node_service=self.node_service,
+            clock=self.clock,
+        )
+        self.resync_traits()
+
+    def resync_traits(self) -> None:
+        """Create missing placement providers and make their traits match
+        the nodes (the node is the source of truth)."""
+        with self.lock:
+            nodes = self.store.list_active("baremetal_nodes")
+            for node in nodes:
+                self.placement.ensure_provider(node)
+            self.placement.resync_traits(nodes)

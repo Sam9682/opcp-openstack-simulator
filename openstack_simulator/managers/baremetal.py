@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from openstack_simulator.exceptions import (
     DuplicateResourceError,
@@ -13,6 +13,9 @@ from openstack_simulator.exceptions import (
     InvalidStateError,
     ResourceNotFoundError,
 )
+from openstack_simulator.clock import Clock
+from openstack_simulator.exceptions import SimError
+from openstack_simulator.managers.transitions import apply_due, pending_for
 from openstack_simulator.models import BaremetalNode, BaremetalPort
 
 if TYPE_CHECKING:
@@ -34,9 +37,26 @@ SCALAR_PATHS = {
 class BaremetalManager:
     """Simulated Ironic baremetal manager."""
 
-    def __init__(self, store: ResourceStore, limiter: ResourceLimiter) -> None:
+    def __init__(
+        self,
+        store: ResourceStore,
+        limiter: ResourceLimiter,
+        node_service: Any = None,
+        clock: Clock | None = None,
+    ) -> None:
         self.store = store
         self.limiter = limiter
+        # Optional: when set, reads sync due transitions and legacy provision
+        # targets run through the shared plan/apply code.
+        self.node_service = node_service
+        self.clock = clock if clock is not None else Clock()
+
+    def _sync(self) -> float:
+        """Apply due transitions (if a NodeService is wired); return now."""
+        now = self.clock.now()
+        if self.node_service is not None:
+            self.node_service.sync(now)
+        return now
 
     def create_node(
         self,
@@ -81,14 +101,19 @@ class BaremetalManager:
             updated_at=now,
         )
         self.store.add("baremetal_nodes", name, node)
+        placement = getattr(self.node_service, "placement", None)
+        if placement is not None:
+            placement.ensure_provider(node)
         return node
 
     def get_node(self, name: str) -> BaremetalNode | None:
         """Get a baremetal node by name. Returns None if not found."""
+        self._sync()
         return self.store.get("baremetal_nodes", name)
 
     def list_nodes(self) -> list[BaremetalNode]:
         """Return all non-deleted baremetal nodes."""
+        self._sync()
         return self.store.list_active("baremetal_nodes")
 
     def update_node(self, node_name: str, **updates) -> BaremetalNode:
@@ -102,6 +127,7 @@ class BaremetalManager:
             ResourceNotFoundError: If node not found.
             DuplicateResourceError: If new name already exists.
         """
+        self._sync()
         node = self.store.get("baremetal_nodes", node_name)
         if node is None:
             raise ResourceNotFoundError(
@@ -182,6 +208,7 @@ class BaremetalManager:
                 or removal of a missing key.
             DuplicateResourceError: If a rename collides with another node.
         """
+        self._sync()
         node = self.store.get("baremetal_nodes", node_name)
         if node is None:
             raise ResourceNotFoundError(
@@ -278,6 +305,9 @@ class BaremetalManager:
 
         node.provision_state = "deleted"
         self.store.mark_deleted("baremetal_nodes", name)
+        placement = getattr(self.node_service, "placement", None)
+        if placement is not None:
+            placement.remove_provider(node.id)
 
     # --- Port operations ---
 
@@ -294,6 +324,7 @@ class BaremetalManager:
             DuplicateResourceError: If MAC address already exists among non-deleted ports.
         """
         self.limiter.check("baremetal_ports", self.store)
+        self._sync()
 
         # Verify node_id references an existing non-deleted node (search by id field)
         active_nodes = self.store.list_active("baremetal_nodes")
@@ -327,6 +358,7 @@ class BaremetalManager:
         Args:
             node_id: If provided, only return ports belonging to this node.
         """
+        self._sync()
         ports = self.store.list_active("baremetal_ports")
         if node_id is not None:
             ports = [p for p in ports if p.node_id == node_id]
@@ -362,6 +394,7 @@ class BaremetalManager:
             InvalidStateError: If provision_state in {enroll, manageable}
                 or if target is invalid for the current state.
         """
+        self._sync()
         node = self.store.get("baremetal_nodes", name)
         if node is None:
             raise ResourceNotFoundError(f"Baremetal node '{name}' not found")
@@ -414,11 +447,15 @@ class BaremetalManager:
             ResourceNotFoundError: If node not found.
             InvalidStateError: If the transition is not valid.
         """
+        now = self._sync()
         node = self.store.get("baremetal_nodes", name)
         if node is None:
             raise ResourceNotFoundError(
                 f"Baremetal node '{name}' not found"
             )
+
+        if self.node_service is not None:
+            return self._legacy_provision(node, name, target, now)
 
         current_state = node.provision_state
 
@@ -440,11 +477,60 @@ class BaremetalManager:
             # Soft-delete via store
             node.provision_state = "deleted"
             self.store.mark_deleted("baremetal_nodes", name)
+            placement = getattr(self.node_service, "placement", None)
+            if placement is not None:
+                placement.remove_provider(node.id)
         else:
             raise InvalidStateError(
                 f"Invalid provision state transition: "
                 f"'{current_state}' + '{target}'"
             )
+
+        node.updated_at = datetime.now(timezone.utc).isoformat()
+        return node
+
+    def _legacy_provision(
+        self, node: BaremetalNode, name: str, target: str, now: float
+    ) -> BaremetalNode:
+        """Run a legacy target through the shared plan/apply code."""
+        svc = self.node_service
+        state = node.provision_state
+        invalid = InvalidStateError(
+            f"Invalid provision state transition: '{state}' + '{target}'"
+        )
+        if node.target_provision_state is not None:
+            raise invalid
+
+        verb = None
+        if target in ("manage", "provide"):
+            verb = target
+        elif target == "clean" and state == "manageable":
+            verb = "inspect"  # manageable -> ... -> manageable
+        elif target == "deleted" and state == "active":
+            verb = "undeploy"
+        elif target == "active" and state == "available":
+            node.provision_state = "active"
+            node.power_state = "power on"
+        elif target == "deleted" and state == "available":
+            node.provision_state = "deleted"
+            self.store.mark_deleted("baremetal_nodes", name)
+            placement = getattr(self.node_service, "placement", None)
+            if placement is not None:
+                placement.remove_provider(node.id)
+        else:
+            raise invalid
+
+        if verb is not None:
+            try:
+                pending = pending_for(node, verb, svc.cfg, now)
+            except SimError as exc:
+                raise InvalidStateError(str(exc)) from exc
+            node.target_provision_state = pending.final_state
+            self.store.pending[node.id] = pending
+            if verb == "undeploy":
+                node.power_state = "power off"
+            with svc.lock:
+                apply_due(node, pending, now, svc.failures, svc._apply_ctx())
 
         node.updated_at = datetime.now(timezone.utc).isoformat()
         return node

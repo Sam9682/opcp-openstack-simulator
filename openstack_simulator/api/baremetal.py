@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, g, request, jsonify
 
+from openstack_simulator import messages
 from openstack_simulator.api.helpers import get_simulator, require_token
 from openstack_simulator.exceptions import (
+    BadRequest,
     DuplicateResourceError,
+    NodeLocked,
+    NotAuthorized,
+    InvalidState,
     InvalidPatchError,
     InvalidStateError,
     ResourceLimitExceededError,
@@ -14,6 +19,15 @@ from openstack_simulator.exceptions import (
 )
 
 baremetal_bp = Blueprint("baremetal", __name__, url_prefix="/baremetal/v1")
+
+PROVISION_TARGETS = (
+    "manage", "provide", "clean", "inspect", "deploy", "undeploy", "active", "deleted",
+)
+_DEPLOY_TARGETS = ("deploy", "active")
+_FIELD_PATHS = (
+    "/owner", "/lessee", "/maintenance", "/maintenance_reason",
+    "/resource_class", "/protected", "/target_raid_config",
+)
 
 VALIDATE_INTERFACES = (
     "bios",
@@ -38,7 +52,7 @@ VALIDATE_INTERFACES = (
 def list_nodes():
     """List all active baremetal nodes."""
     sim = get_simulator()
-    nodes = sim.baremetal_manager.list_nodes()
+    nodes = sim.node_service.visible_nodes(g.caller_context)
     return jsonify({"nodes": [n.to_dict() for n in nodes]})
 
 
@@ -81,7 +95,7 @@ def create_node():
 def list_nodes_detail():
     """List all active baremetal nodes with full detail."""
     sim = get_simulator()
-    nodes = sim.baremetal_manager.list_nodes()
+    nodes = sim.node_service.visible_nodes(g.caller_context)
     return jsonify({"nodes": [n.to_dict() for n in nodes]})
 
 
@@ -139,6 +153,7 @@ def update_node(node_ident: str):
 
     try:
         if isinstance(data, list):
+            data = _apply_node_field_ops(sim, node, data)
             updated_node = sim.baremetal_manager.patch_node(node.name, data)
         elif isinstance(data, dict):
             updated_node = sim.baremetal_manager.update_node(node.name, **data)
@@ -211,14 +226,160 @@ def set_provision_state(node_ident: str):
     if not target:
         return jsonify({"error": {"message": "Provision state target is required", "code": 400}}), 400
 
+    if target not in PROVISION_TARGETS:
+        return jsonify({"error": {"message": f"Invalid provision target: {target}", "code": 400}}), 400
+
+    ctx = g.caller_context
+    svc = sim.node_service
     try:
-        sim.baremetal_manager.set_provision_state(node.name, target)
+        if target in _DEPLOY_TARGETS:
+            _deploy(sim, ctx, node, target)
+        elif target == "deleted":
+            _require_admin(ctx)
+            sim.baremetal_manager.set_provision_state(node.name, "deleted")
+        elif target == "clean" and node.provision_state == "manageable":
+            # Legacy: clean on a manageable node returns to manageable.
+            _require_admin(ctx)
+            sim.baremetal_manager.set_provision_state(node.name, "clean")
+        else:
+            svc.provision(ctx, node.id, target)
     except InvalidStateError as e:
         return jsonify({"conflict": {"message": str(e), "code": 409}}), 409
     except ResourceNotFoundError as e:
         return jsonify({"error": {"message": str(e), "code": 404}}), 404
 
     return "", 202
+
+
+def _require_admin(ctx) -> None:
+    if not ctx.is_admin:
+        raise NotAuthorized(messages.admin_required())
+
+
+def _deploy(sim, ctx, node, target: str) -> None:
+    """Deploy (``active``/``deploy``): lessee check, lock check, then deploy."""
+    svc = sim.node_service
+    with svc.lock:
+        svc.sync(ctx.now)
+        if node.lessee and node.lessee != ctx.project_id:
+            raise NotAuthorized(messages.not_authorized(node.id))
+        _require_admin(ctx)
+        if node.target_provision_state is not None:
+            raise NodeLocked(messages.node_locked(node.id))
+        sim.baremetal_manager.set_provision_state(node.name, "active")
+
+
+@baremetal_bp.route("/nodes/<node_ident>/maintenance", methods=["PUT"])
+@require_token
+def set_node_maintenance(node_ident: str):
+    """Set the maintenance flag (optional ``reason``)."""
+    sim = get_simulator()
+    node = _find_node(sim, node_ident)
+    if node is None:
+        return jsonify({"error": {"message": f"Node {node_ident} not found", "code": 404}}), 404
+    data = request.get_json(silent=True)
+    reason = data.get("reason") if isinstance(data, dict) else None
+    sim.node_service.set_maintenance(node.id, True, reason)
+    return "", 202
+
+
+@baremetal_bp.route("/nodes/<node_ident>/maintenance", methods=["DELETE"])
+@require_token
+def clear_node_maintenance(node_ident: str):
+    """Clear the maintenance flag."""
+    sim = get_simulator()
+    node = _find_node(sim, node_ident)
+    if node is None:
+        return jsonify({"error": {"message": f"Node {node_ident} not found", "code": 404}}), 404
+    sim.node_service.set_maintenance(node.id, False, None)
+    return "", 202
+
+
+@baremetal_bp.route("/nodes/<node_ident>/traits/<trait>", methods=["PUT"])
+@require_token
+def add_node_trait(node_ident: str, trait: str):
+    """Add a trait to a node (normalized, copied to Placement)."""
+    sim = get_simulator()
+    node = _find_node(sim, node_ident)
+    if node is None:
+        return jsonify({"error": {"message": f"Node {node_ident} not found", "code": 404}}), 404
+    sim.node_service.add_trait(node.id, trait)
+    return "", 204
+
+
+@baremetal_bp.route("/nodes/<node_ident>/traits/<trait>", methods=["DELETE"])
+@require_token
+def remove_node_trait(node_ident: str, trait: str):
+    """Remove one trait from a node."""
+    sim = get_simulator()
+    node = _find_node(sim, node_ident)
+    if node is None:
+        return jsonify({"error": {"message": f"Node {node_ident} not found", "code": 404}}), 404
+    sim.node_service.remove_trait(node.id, trait)
+    return "", 204
+
+
+def _validate_raid_config(value) -> None:
+    """Root logical disk of a target_raid_config must be RAID 1."""
+    if value is None:
+        return
+    disks = value.get("logical_disks") if isinstance(value, dict) else None
+    if not isinstance(disks, list):
+        raise BadRequest("target_raid_config requires a 'logical_disks' list")
+    for disk in disks:
+        if not isinstance(disk, dict):
+            raise BadRequest("Each logical disk must be an object")
+        if disk.get("is_root_volume") and str(disk.get("raid_level")) != "1":
+            raise BadRequest("The root logical disk must be RAID 1")
+
+
+def _apply_node_field_ops(sim, node, ops: list) -> list:
+    """Apply PATCH ops on the new node fields; return the remaining ops."""
+    ctx = g.caller_context
+    svc = sim.node_service
+    mine, rest = [], []
+    for op in ops:
+        path = op.get("path") if isinstance(op, dict) else None
+        (mine if path in _FIELD_PATHS else rest).append(op)
+
+    # Validate everything before mutating anything.
+    parsed = []
+    for op in mine:
+        kind = op.get("op")
+        path = op["path"]
+        if kind not in ("add", "replace", "remove"):
+            raise InvalidPatchError(f"Unsupported patch op '{kind}'")
+        if kind != "remove" and "value" not in op:
+            raise InvalidPatchError(f"Patch op '{kind}' on '{path}' requires 'value'")
+        value = None if kind == "remove" else op["value"]
+        if path in ("/maintenance", "/protected"):
+            if kind == "remove":
+                value = False
+            elif not isinstance(value, bool):
+                raise InvalidPatchError(f"'{path}' value must be a boolean")
+        elif path in ("/owner", "/lessee", "/maintenance_reason", "/resource_class"):
+            if value is not None and not isinstance(value, str):
+                raise InvalidPatchError(f"'{path}' value must be a string")
+        elif path == "/target_raid_config":
+            _validate_raid_config(value)
+        parsed.append((path, value))
+
+    for path, value in parsed:
+        if path == "/owner":
+            svc.set_owner(ctx, node.id, value)
+        elif path == "/lessee":
+            svc.set_lessee(ctx, node.id, value)
+        elif path == "/maintenance":
+            svc.set_maintenance(node.id, value, node.maintenance_reason if value else None)
+        elif path == "/maintenance_reason":
+            svc.set_maintenance(node.id, bool(node.maintenance), value)
+        elif path == "/resource_class":
+            svc.set_resource_class(node.id, value)
+        elif path == "/protected":
+            svc.set_protected(node.id, value)
+        elif path == "/target_raid_config":
+            svc.set_target_raid_config(node.id, value)
+    return rest
 
 
 # --- Port endpoints ---
