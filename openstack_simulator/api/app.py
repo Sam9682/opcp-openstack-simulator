@@ -184,6 +184,22 @@ def _render_readme() -> str:
     #if (request.scheme == "http" and request.environ.get('SERVER_PORT') != "80") or \
     #   (request.scheme == "https" and request.environ.get('SERVER_PORT') != "443"):
     #    base_url += f":{request.environ.get('SERVER_PORT')}"
+    # The auth_url in the "Application Credentials" table must show the HTTP port
+    # of the backend-component container (published as HTTP_PORT by docker-compose).
+    http_port = os.environ.get("HTTP_PORT")
+    backend_url = base_url
+    if http_port:
+        backend_url = f"{request.scheme}://{request.host.split(':')[0]}:{http_port}"
+        md_content = md_content.replace(
+            "| `auth_url`                      | `http://localhost:5000/identity/v3` |",
+            f"| `auth_url`                      | `{backend_url}/identity/v3` |",
+        )
+    # The OS_AUTH_URL export must show the same value as auth_url in the table.
+    auth_base = backend_url if http_port else base_url
+    md_content = md_content.replace(
+        "export OS_AUTH_URL=http://localhost:5000/identity/v3",
+        f"export OS_AUTH_URL={auth_base}/identity/v3",
+    )
     md_content = md_content.replace("http://localhost:5000", base_url)
 
     html_body = markdown.markdown(

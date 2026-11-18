@@ -19,7 +19,8 @@ def get_simulator():
 
 def get_base_url() -> str:
     """Build the base URL from the current request."""
-    return request.host_url.rstrip("/")
+    scheme = request.headers.get("X-Forwarded-Proto", request.scheme).split(",")[0].strip()
+    return f"{scheme}://{request.host}"
 
 
 def require_token(f):

@@ -92,55 +92,59 @@ The simulator exposes a full OpenStack-compatible REST API that works with the s
 
 1. Install the OpenStack CLI:
 
-```bash
-pip install python-openstackclient
-```
+    ```bash
+    pip install python-openstackclient
+    ```
 
 2. Copy the provided `clouds.yaml` to your OpenStack config directory:
 
-```bash
-mkdir -p ~/.config/openstack
-cp deploy/clouds.yaml ~/.config/openstack/clouds.yaml
-```
+    ```bash
+    mkdir -p ~/.config/openstack
+    cp deploy/clouds.yaml ~/.config/openstack/clouds.yaml
+    ```
 
-3. Use the simulator:
+3. Set the environment variables:
 
-```bash
-# Set the cloud (or pass --os-cloud simulator to each command)
-unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
-# OS_AUTH_URL has to point to the Openstack Simulator http://opcp-psmc.com:6124/identity/v3
-export OS_AUTH_URL=http://opcp-psmc.com:6124/identity/v3
-export OS_APPLICATION_CREDENTIAL_ID=simulator-app-credential
-export OS_APPLICATION_CREDENTIAL_SECRET=simulator-secret
-export OS_REGION_NAME=RegionOne
-export OS_INTERFACE=public
-export OS_IDENTITY_API_VERSION=3
-export OS_AUTH_TYPE=v3applicationcredential
+    ```bash
+    # Set the cloud (or pass --os-cloud simulator to each command)
+    unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+    # OS_AUTH_URL has to point to the Openstack Simulator (same as auth_url in "Application Credentials")
+    export OS_AUTH_URL=http://localhost:5000/identity/v3
+    export OS_APPLICATION_CREDENTIAL_ID=simulator-app-credential
+    export OS_APPLICATION_CREDENTIAL_SECRET=simulator-secret
+    export OS_REGION_NAME=RegionOne
+    export OS_INTERFACE=public
+    export OS_IDENTITY_API_VERSION=3
+    export OS_AUTH_TYPE=v3applicationcredential
+    ```
 
-# Authenticate and list servers
-openstack server list
+4. Use the simulator:
 
-# Create a server
-openstack server create --flavor m1.small --image ubuntu-22.04 my-server
+    ```bash
+    # Authenticate and list servers
+    openstack server list
 
-# Create a network
-openstack network create my-network
+    # Create a server
+    openstack server create --flavor m1.small --image ubuntu-22.04 my-server
 
-# Create a volume
-openstack volume create --size 10 my-volume
+    # Create a network
+    openstack network create my-network
 
-# Create a security group
-openstack security group create my-sg
+    # Create a volume
+    openstack volume create --size 10 my-volume
 
-# Add a rule
-openstack security group rule create --protocol tcp --dst-port 80 my-sg
+    # Create a security group
+    openstack security group create my-sg
 
-# Baremetal node management
-openstack baremetal node create --driver ipmi --name my-node
-openstack baremetal node list
-openstack baremetal node set my-node --provision-state manage
-openstack baremetal node set my-node --provision-state provide
-```
+    # Add a rule
+    openstack security group rule create --protocol tcp --dst-port 80 my-sg
+
+    # Baremetal node management
+    openstack baremetal node create --driver ipmi --name my-node
+    openstack baremetal node list
+    openstack baremetal node set my-node --provision-state manage
+    openstack baremetal node set my-node --provision-state provide
+    ```
 
 ### Application Credentials
 
