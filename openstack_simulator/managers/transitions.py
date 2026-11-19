@@ -12,7 +12,7 @@ from typing import Any, Callable, Iterable, Mapping, MutableMapping, Optional
 
 from .. import messages
 from ..exceptions import InvalidState, NodeNotProvided
-from ..models import PendingTransition, Step, _now_timestamp
+from ..models import PendingTransition, Step, _now_timestamp, node_capacity
 from ..sim_config import SimConfig
 
 # (provision_state, verb) -> ordered list of states to pass through.
@@ -165,7 +165,7 @@ def deploy_preflight(
         return f"RAID interface {node.raid_interface} does not support target_raid_config"
 
     props = node.properties or {}
-    local_gb = node.local_gb
+    local_gb = node_capacity(node, "local_gb")
     root_gb = props.get("root_gb")
     if isinstance(root_gb, (int, float)) and not isinstance(root_gb, bool):
         min_disk = _attr(image, "min_disk") if image is not None else None

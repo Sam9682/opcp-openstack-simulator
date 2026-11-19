@@ -40,7 +40,13 @@ from ..exceptions import (
     SecurityGroupNotFound,
     SimError,
 )
-from ..models import Instance, PendingTransition, _generate_id, _now_timestamp
+from ..models import (
+    Instance,
+    PendingTransition,
+    _generate_id,
+    _now_timestamp,
+    node_capacity,
+)
 from ..sim_config import SimConfig
 from ..traits import normalize_trait
 from .scheduler import (
@@ -500,9 +506,9 @@ class ServerCreationService:
         if not pool:
             return
         if all(
-            flavor.ram > n.memory_mb
-            or flavor.vcpus > n.cpus
-            or flavor.disk > n.local_gb
+            flavor.ram > node_capacity(n, "memory_mb")
+            or flavor.vcpus > node_capacity(n, "cpus")
+            or flavor.disk > node_capacity(n, "local_gb")
             for n in pool
         ):
             raise BadRequest(

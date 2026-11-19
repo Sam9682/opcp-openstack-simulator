@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from ..exceptions import InvalidTrait
+from ..models import node_capacity
 from ..sim_config import Features, Guards
 from ..traits import normalize_trait
 
@@ -197,7 +198,7 @@ def is_schedulable(node, flavor, request, image, project, ctx: SchedulingContext
         if img_arch is not None and not _same_arch(img_arch, node_arch):
             return _fail("image_arch")
 
-    if _get(flavor, "disk", 0) > (_get(node, "local_gb", 0) or 0):
+    if _get(flavor, "disk", 0) > node_capacity(node, "local_gb"):
         return _fail("flavor_disk")
 
     if guards.enforce_owner:

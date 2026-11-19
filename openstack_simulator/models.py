@@ -10,7 +10,7 @@ import copy
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 FAKE_PROJECT_ID = "fake-project-id-00000000001"
 
@@ -23,6 +23,31 @@ def _generate_id() -> str:
 def _now_timestamp() -> str:
     """Generate an ISO 8601 timestamp with Z suffix."""
     return datetime.utcnow().isoformat() + "Z"
+
+
+CAPACITY_FIELDS = ("memory_mb", "cpus", "local_gb")
+
+
+def node_capacity(node: Any, field: str) -> int:
+    """Return a node's capacity for ``field`` (``memory_mb``, ``cpus``, ``local_gb``).
+
+    Ironic keeps these in ``properties`` (``openstack baremetal node set
+    --property memory_mb=4096``), where values arrive as strings. Prefer that
+    value and fall back to the top-level attribute used by the simulator's own
+    node API. Missing or non-numeric values count as 0.
+    """
+    props = getattr(node, "properties", None) or {}
+    raw = props.get(field)
+    if raw is None:
+        raw = props.get(field.replace("_", "-"))
+    if raw is None:
+        raw = getattr(node, field, None)
+    if isinstance(raw, bool):
+        return 0
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 0
 
 
 @dataclass
