@@ -329,6 +329,21 @@ def test_s10_single_available_node(client, auth_token):
     assert node.instance_uuid == server_id
 
 
+def test_s10c_available_node_without_resource_class(client, auth_token):
+    """A node created without ``--resource-class`` still gets inventory.
+
+    Placement must key the provider's inventory on the flavor's effective
+    class (``CUSTOM_BAREMETAL``), not on the node's raw (missing) class.
+    """
+    flavor = make_baremetal_flavor(client, "bm-small")
+    image_id = make_image(client)
+    node_id = make_node(client, "node-1", "available", resource_class=None)
+
+    resp = create_server(client, flavor, image_id)
+    assert resp.status_code == 202, (resp.status_code, resp.get_json())
+    assert _node(client, node_id).instance_uuid == resp.get_json()["server"]["id"]
+
+
 def test_s10b_available_node_with_ironic_style_resource_class(client, auth_token):
     """Ironic nodes carry ``baremetal``; the flavor spec is ``CUSTOM_BAREMETAL``.
 

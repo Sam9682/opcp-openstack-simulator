@@ -113,6 +113,19 @@ def test_visible_nodes():
     svc, _, node, _ = _make("available", owner="p1")
     assert svc.visible_nodes(_ctx(admin=False, project="p1")) == [node]
     assert svc.visible_nodes(_ctx(admin=False, project="p2")) == []
+
+
+def test_ensure_provider_normalizes_ironic_resource_class():
+    """Inventory keys must match ``effective_resource_class(flavor)``."""
+    svc, _, node, placement = _make("available", resource_class="baremetal")
+    svc.set_resource_class("node1", "baremetal")
+    assert set(placement.snapshot()["n-1"].inventory) == {"CUSTOM_BAREMETAL"}
+
+
+def test_ensure_provider_defaults_missing_resource_class():
+    svc, _, node, placement = _make("available")
+    svc.set_resource_class("node1", None)
+    assert set(placement.snapshot()["n-1"].inventory) == {"CUSTOM_BAREMETAL"}
     assert svc.visible_nodes(_ctx(admin=True, project="p2")) == [node]
     node.owner, node.lessee = None, "p2"
     assert svc.visible_nodes(_ctx(admin=False, project="p2")) == [node]

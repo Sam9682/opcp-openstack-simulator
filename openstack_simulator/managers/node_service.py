@@ -164,6 +164,7 @@ class NodeService:
         with self.lock:
             node = self._find(ident)
             node.resource_class = value
+            self.placement.ensure_provider(node)
             return node
 
     def set_protected(self, ident: str, value: bool) -> Any:

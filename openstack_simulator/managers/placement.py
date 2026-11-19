@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
+from .scheduler import DEFAULT_RESOURCE_CLASS, normalize_resource_class
+
 
 @dataclass
 class Inventory:
@@ -47,7 +49,12 @@ class PlacementService:
 
     def ensure_provider(self, node: Any) -> Provider:
         """Create the provider for ``node`` if missing; keep inventory in step
-        with the node resource class. Existing traits are left untouched."""
+        with the node resource class. Existing traits are left untouched.
+
+        The inventory key is the Ironic-style ``CUSTOM_<CLASS>`` name, so it
+        matches ``effective_resource_class(flavor)``. A node without a resource
+        class gets ``DEFAULT_RESOURCE_CLASS``, mirroring the scheduler.
+        """
         with self._lock:
             provider = self._providers.get(node.id)
             if provider is None:
@@ -55,9 +62,12 @@ class PlacementService:
                     uuid=node.id, traits=frozenset(node.traits or ())
                 )
                 self._providers[node.id] = provider
-            rc = node.resource_class
-            if rc and rc not in provider.inventory:
+            rc = normalize_resource_class(node.resource_class) or DEFAULT_RESOURCE_CLASS
+            if rc not in provider.inventory:
                 provider.inventory[rc] = Inventory(1, 0, 1.0)
+            stale = set(provider.inventory) - {rc} - set(provider.allocations.values())
+            for key in stale:
+                del provider.inventory[key]
             return provider
 
     def remove_provider(self, provider_id: str) -> None:
