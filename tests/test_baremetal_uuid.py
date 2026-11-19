@@ -61,7 +61,7 @@ def _assert_uuid4(value):
 
 
 def test_cli_node_create_minimal_has_uuid():
-    """`openstack baremetal node create --driver ipmi --name my-node`."""
+    """`openstack baremetal node create --driver ipmi --name my-node  --resource-class CUSTOM_BAREMETAL`."""
     client = _new_client()
     headers = _cli_headers(client)
     resp = client.post("/baremetal/v1/nodes", headers=headers,

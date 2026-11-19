@@ -141,7 +141,8 @@ D. Use the simulator:
     openstack security group rule create --protocol tcp --dst-port 80 my-sg
 
     # Baremetal node management
-    openstack baremetal node create --driver ipmi --name my-node
+    openstack baremetal node create --driver ipmi --name my-node --resource-class CUSTOM_BAREMETAL
+    openstack baremetal node set --property memory_mb=8192 --property cpus=8 --property local-gb=100 node-0000-0001
     openstack baremetal node list
     openstack baremetal node manage my-node 
     openstack baremetal node provide my-node
