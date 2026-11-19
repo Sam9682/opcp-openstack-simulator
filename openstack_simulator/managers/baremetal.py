@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-import uuid
+import uuid as uuid_lib
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
