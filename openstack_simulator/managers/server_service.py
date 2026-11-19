@@ -45,8 +45,9 @@ from ..sim_config import SimConfig
 from ..traits import normalize_trait
 from .scheduler import (
     SchedulingContext,
-    flavor_resource_class,
+    effective_resource_class,
     is_schedulable,
+    normalize_resource_class,
     pick,
 )
 from .transitions import pending_for, plan_deploy
@@ -494,12 +495,8 @@ class ServerCreationService:
             return
         pool = self._az_pool(req, nodes)
         if pool is None:
-            rc = flavor_resource_class(flavor)
-            pool = [
-                n
-                for n in nodes
-                if rc is None or self._node_class(n) == rc
-            ]
+            rc = effective_resource_class(flavor)
+            pool = [n for n in nodes if self._node_class(n) == rc]
         if not pool:
             return
         if all(
@@ -514,11 +511,7 @@ class ServerCreationService:
 
     @staticmethod
     def _node_class(node: Any) -> Optional[str]:
-        rc = node.resource_class
-        if not rc:
-            return None
-        rc = "".join(c if c.isalnum() else "_" for c in str(rc).upper())
-        return rc if rc.startswith("CUSTOM_") else "CUSTOM_" + rc
+        return normalize_resource_class(node.resource_class)
 
     @staticmethod
     def _az_node_id(req: CreateRequest) -> Optional[str]:
@@ -591,10 +584,10 @@ class ServerCreationService:
             if is_schedulable(node, flavor, req, image, project, sctx).ok:
                 passing[node.id] = node
 
-        rc = flavor_resource_class(flavor)
+        rc = effective_resource_class(flavor)
         for node_id in pick(list(passing), self.cfg.seed, req.name):  # step 6
             node = passing[node_id]
-            if rc is not None and not self.placement.claim(node.id, req.id, rc):
+            if not self.placement.claim(node.id, req.id, rc):
                 continue  # step 7 lost the race; try the next candidate
             try:
                 return self._allocate(ctx, project, req, flavor, image, node)

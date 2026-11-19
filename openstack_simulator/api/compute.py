@@ -92,15 +92,22 @@ def list_servers_detail():
     return jsonify({"servers": servers})
 
 
+DEFAULT_RESOURCE_CLASS = "CUSTOM_BAREMETAL"
+
+
 def _baremetal_flavor(sim, flavor_ref):
-    """Return the flavor when it carries a bare-metal class, else None."""
+    """Return the flavor to schedule on baremetal nodes.
+
+    Every flavor is scheduled onto baremetal nodes, so this returns the
+    resolved flavor. A flavor without a ``resources:CUSTOM_<CLASS>=1``
+    extra spec uses ``DEFAULT_RESOURCE_CLASS`` (``CUSTOM_BAREMETAL``), the
+    class Ironic maps node class ``baremetal`` to.
+    """
     flavors = sim.store.flavors
     flavor = flavors.get(flavor_ref)
     if flavor is None:
         flavor = next((f for f in flavors.values() if f.name == flavor_ref), None)
-    if flavor is not None and flavor_resource_class(flavor) is not None:
-        return flavor
-    return None
+    return flavor
 
 
 @compute_bp.route("/servers", methods=["POST"])
@@ -138,6 +145,9 @@ def create_server():
         server = _instance_to_server(instance, project_id)
         server["adminPass"] = "simulated-password"
         return jsonify({"server": server}), 202
+
+    if flavor_ref is not None:
+        raise FlavorNotFound(messages.flavor_not_found(flavor_ref))
 
     try:
         instance = sim.compute_manager.create(name, flavor_ref, image_ref)

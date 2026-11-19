@@ -61,6 +61,9 @@ def _norm_trait(raw: str) -> str:
         return str(raw).strip().upper()
 
 
+DEFAULT_RESOURCE_CLASS = "CUSTOM_BAREMETAL"
+
+
 def flavor_resource_class(flavor: Any) -> Optional[str]:
     """Return ``CUSTOM_<CLASS>`` from a ``resources:CUSTOM_<CLASS>=1`` extra spec."""
     specs = _get(flavor, "extra_specs", None) or {}
@@ -70,12 +73,26 @@ def flavor_resource_class(flavor: Any) -> Optional[str]:
     return None
 
 
-def _node_resource_class(node: Any) -> Optional[str]:
-    rc = _get(node, "resource_class")
-    if not rc:
+def effective_resource_class(flavor: Any) -> str:
+    """Resource class a flavor schedules with.
+
+    A flavor without a ``resources:CUSTOM_<CLASS>=1`` extra spec uses
+    ``DEFAULT_RESOURCE_CLASS`` (``CUSTOM_BAREMETAL``), the class Ironic maps
+    node class ``baremetal`` to.
+    """
+    return flavor_resource_class(flavor) or DEFAULT_RESOURCE_CLASS
+
+
+def normalize_resource_class(raw: Any) -> Optional[str]:
+    """Return Ironic-style ``CUSTOM_<CLASS>`` for a node resource class."""
+    if not raw:
         return None
-    rc = "".join(c if c.isalnum() else "_" for c in str(rc).upper())
+    rc = "".join(c if c.isalnum() else "_" for c in str(raw).upper())
     return rc if rc.startswith("CUSTOM_") else "CUSTOM_" + rc
+
+
+def _node_resource_class(node: Any) -> Optional[str]:
+    return normalize_resource_class(_get(node, "resource_class"))
 
 
 def required_traits(flavor: Any, request: Any, ctx: SchedulingContext) -> frozenset:
@@ -149,23 +166,20 @@ def is_schedulable(node, flavor, request, image, project, ctx: SchedulingContext
     if features.protected_field and _get(node, "protected"):
         return _fail("protected")
 
-    flavor_rc = flavor_resource_class(flavor)
-    if flavor_rc is None:
-        if guards.require_resource_class:
-            return _fail("resource_class")
-    elif _node_resource_class(node) != flavor_rc:
+    flavor_rc = effective_resource_class(flavor)
+    node_rc = _node_resource_class(node) or DEFAULT_RESOURCE_CLASS
+    if node_rc != flavor_rc:
         return _fail("resource_class")
 
-    if flavor_rc is not None:
-        provider = ctx.provider
-        if provider is None or not _inventory_ok(provider, flavor_rc):
-            return _fail("placement_inventory")
-        own = _get(request, "id")
-        allocations = _get(provider, "allocations", None) or {}
-        if any(consumer != own for consumer in allocations):
-            return _fail("placement_inventory")
-        if not _az_ok(node, provider, ctx.az):
-            return _fail("placement_inventory")
+    provider = ctx.provider
+    if provider is None or not _inventory_ok(provider, flavor_rc):
+        return _fail("placement_inventory")
+    own = _get(request, "id")
+    allocations = _get(provider, "allocations", None) or {}
+    if any(consumer != own for consumer in allocations):
+        return _fail("placement_inventory")
+    if not _az_ok(node, provider, ctx.az):
+        return _fail("placement_inventory")
 
     required = required_traits(flavor, request, ctx)
     if required:
