@@ -402,6 +402,7 @@ class BaremetalNode:
     def to_dict(self) -> dict:
         return {
             "id": self.id,
+            "uuid": self.id,
             "name": self.name,
             "driver": self.driver,
             "power_state": self.power_state,

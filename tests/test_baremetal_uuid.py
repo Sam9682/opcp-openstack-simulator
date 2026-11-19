@@ -297,3 +297,15 @@ def test_manager_create_node_malformed_uuid_raises_value_error(bad):
     with pytest.raises(ValueError):
         mgr.create_node("n", "ipmi", uuid=bad)
     assert mgr.store.count_active("baremetal_nodes") == 0
+
+
+def test_manager_uuid_of_deleted_node_can_be_reused():
+    """Decision (task 8.5): duplicates are checked against active nodes only,
+    so a UUID may be reused after the node is deleted."""
+    mgr = _new_manager()
+    mgr.create_node("a", "ipmi", uuid=FIXED_UUID)
+    mgr.delete_node("a")
+    node = mgr.create_node("b", "ipmi", uuid=FIXED_UUID.upper())
+    assert node.id == FIXED_UUID
+    with pytest.raises(DuplicateResourceError):
+        mgr.create_node("c", "ipmi", uuid=FIXED_UUID)

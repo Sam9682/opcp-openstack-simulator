@@ -68,13 +68,30 @@ class BaremetalManager:
         cpu_arch: str = "x86_64",
         driver_info: dict | None = None,
         properties: dict | None = None,
+        uuid: str | None = None,
     ) -> BaremetalNode:
         """Create a new baremetal node.
 
+        Args:
+            uuid: Optional node UUID. Stored in canonical lowercase form.
+                When omitted a random UUID v4 is generated.
+
+        UUID reuse decision: duplicates are checked against active nodes
+        only, so the UUID of a soft-deleted node may be reused (same rule
+        as names).
+
         Raises:
             ResourceLimitExceededError: If max_baremetal_nodes reached.
-            DuplicateResourceError: If name already exists (non-deleted).
+            DuplicateResourceError: If name already exists (non-deleted), or
+                an active node already has the given UUID.
+            ValueError: If uuid is given and is not a valid UUID.
         """
+        node_id: str | None = None
+        if uuid is not None:
+            if not isinstance(uuid, str):
+                raise ValueError(f"Invalid node UUID: {uuid!r}")
+            node_id = str(uuid_lib.UUID(uuid))
+
         self.limiter.check("baremetal_nodes", self.store)
 
         existing = self.store.get("baremetal_nodes", name)
@@ -83,9 +100,16 @@ class BaremetalManager:
                 f"Baremetal node '{name}' already exists"
             )
 
+        if node_id is None:
+            node_id = str(uuid_lib.uuid4())
+        elif any(n.id == node_id for n in self.store.list_active("baremetal_nodes")):
+            raise DuplicateResourceError(
+                f"Baremetal node with UUID '{node_id}' already exists"
+            )
+
         now = datetime.now(timezone.utc).isoformat()
         node = BaremetalNode(
-            id=str(uuid.uuid4()),
+            id=node_id,
             name=name,
             driver=driver,
             power_state="power off",
@@ -343,7 +367,7 @@ class BaremetalManager:
 
         now = datetime.now(timezone.utc).isoformat()
         port = BaremetalPort(
-            id=str(uuid.uuid4()),
+            id=str(uuid_lib.uuid4()),
             node_id=node_id,
             address=address,
             status="ACTIVE",
