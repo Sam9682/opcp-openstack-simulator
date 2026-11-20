@@ -1,5 +1,6 @@
 """Smoke test for the OpenStack-compatible REST API."""
 
+from openstack_simulator.credentials import credential_secret
 import json
 import pytest
 
@@ -23,8 +24,8 @@ def auth_token(client):
             "identity": {
                 "methods": ["application_credential"],
                 "application_credential": {
-                    "id": "simulator-app-credential",
-                    "secret": "simulator-secret",
+                    "id": "simulator",
+                    "secret": credential_secret("simulator"),
                 },
             }
         }
@@ -72,13 +73,30 @@ class TestIdentityAPI:
                     "methods": ["application_credential"],
                     "application_credential": {
                         "id": "my-app-cred",
-                        "secret": "my-secret",
+                        "secret": credential_secret("my-app-cred"),
                     },
                 }
             }
         })
         assert resp.status_code == 201
         assert "X-Subject-Token" in resp.headers
+        token = resp.get_json()["token"]
+        assert token["project"]["name"] == "my-app-cred-project"
+
+    def test_application_credential_secret_must_be_hash(self, client):
+        resp = client.post("/identity/v3/auth/tokens", json={
+            "auth": {
+                "identity": {
+                    "methods": ["application_credential"],
+                    "application_credential": {
+                        "id": "my-app-cred",
+                        "secret": "my-secret",
+                    },
+                }
+            }
+        })
+        assert resp.status_code == 401
+        assert "SHA-256" in resp.get_json()["error"]["message"]
 
     def test_validate_token(self, client, auth_token):
         resp = client.get("/identity/v3/auth/tokens", headers={

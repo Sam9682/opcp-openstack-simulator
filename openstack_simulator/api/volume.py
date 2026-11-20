@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify
 
-from openstack_simulator.api.helpers import get_simulator, require_token
+from openstack_simulator.api.helpers import (
+    current_project_id,
+    get_simulator,
+    require_token,
+)
 from openstack_simulator.exceptions import (
     DuplicateResourceError,
     InvalidStateError,
@@ -120,7 +124,7 @@ def volume_action(project_id: str, volume_id: str):
 # --- Helpers ---
 
 def _volume_to_dict(volume) -> dict:
-    project_id = current_app.config["PROJECT_ID"]
+    project_id = current_project_id()
     attachments = []
     if volume.attached_to:
         attachments.append({

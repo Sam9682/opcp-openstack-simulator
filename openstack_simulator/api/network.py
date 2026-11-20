@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify
 
-from openstack_simulator.api.helpers import get_simulator, require_token
+from openstack_simulator.api.helpers import (
+    current_project_id,
+    get_simulator,
+    require_token,
+)
 from openstack_simulator.exceptions import (
     DuplicateResourceError,
     ResourceLimitExceededError,
@@ -303,7 +307,7 @@ def delete_security_group_rule(rule_id: str):
 # --- Helpers ---
 
 def _network_to_dict(network) -> dict:
-    project_id = current_app.config["PROJECT_ID"]
+    project_id = current_project_id()
     return {
         "id": network.id,
         "name": network.name,
@@ -318,7 +322,7 @@ def _network_to_dict(network) -> dict:
 
 
 def _subnet_to_dict(subnet) -> dict:
-    project_id = current_app.config["PROJECT_ID"]
+    project_id = current_project_id()
     return {
         "id": subnet.id,
         "name": subnet.name,
@@ -333,7 +337,7 @@ def _subnet_to_dict(subnet) -> dict:
 
 
 def _router_to_dict(router) -> dict:
-    project_id = current_app.config["PROJECT_ID"]
+    project_id = current_project_id()
     return {
         "id": router.id,
         "name": router.name,
@@ -345,7 +349,7 @@ def _router_to_dict(router) -> dict:
 
 
 def _port_to_dict(port) -> dict:
-    project_id = current_app.config["PROJECT_ID"]
+    project_id = current_project_id()
     return {
         "id": port.id,
         "name": port.name,
@@ -359,7 +363,7 @@ def _port_to_dict(port) -> dict:
 
 
 def _sg_to_dict(sg) -> dict:
-    project_id = current_app.config["PROJECT_ID"]
+    project_id = current_project_id()
     return {
         "id": sg.id,
         "name": sg.name,

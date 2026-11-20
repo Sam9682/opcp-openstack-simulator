@@ -1,21 +1,24 @@
 """End-to-end test of the Docker-hosted OpenStack Simulator API."""
 
 import json
+import hashlib
 import urllib.request
 import sys
 
 BASE = "http://localhost:5000"
+CREDENTIAL_ID = "simulator"
+CREDENTIAL_SECRET = hashlib.sha256(CREDENTIAL_ID.encode()).hexdigest()
 
 
 def main():
-    # 1. Get token via application_credential auth
+    # 1. Get token via application_credential auth (secret = SHA-256 of the id)
     auth_body = json.dumps({
         "auth": {
             "identity": {
                 "methods": ["application_credential"],
                 "application_credential": {
-                    "id": "simulator-app-credential",
-                    "secret": "simulator-secret",
+                    "id": CREDENTIAL_ID,
+                    "secret": CREDENTIAL_SECRET,
                 },
             }
         }
@@ -32,7 +35,10 @@ def main():
     body = json.loads(resp.read())
     assert "token" in body
     assert "catalog" in body["token"]
+    project_id = body["token"]["project"]["id"]
+    assert body["token"]["project"]["name"] == f"{CREDENTIAL_ID}-project"
     print(f"[OK] Token issued: {token[:20]}...")
+    print(f"     Project: {body['token']['project']['name']} ({project_id})")
     print(f"     Service catalog: {len(body['token']['catalog'])} services")
 
     # 2. List servers (should be empty)
@@ -84,11 +90,12 @@ def main():
     assert resp.status == 201
     data = json.loads(resp.read())
     assert data["network"]["name"] == "docker-test-net"
+    assert data["network"]["tenant_id"] == project_id
     print("[OK] Network: network created")
 
     # 6. List volumes (should be empty)
     req = urllib.request.Request(
-        f"{BASE}/volume/v3/fake-project-id-00000000001/volumes",
+        f"{BASE}/volume/v3/{project_id}/volumes",
         headers={"X-Auth-Token": token},
     )
     resp = urllib.request.urlopen(req)
@@ -100,7 +107,7 @@ def main():
     # 7. Create a volume
     vol_body = json.dumps({"volume": {"name": "docker-test-vol", "size": 10}}).encode()
     req = urllib.request.Request(
-        f"{BASE}/volume/v3/fake-project-id-00000000001/volumes",
+        f"{BASE}/volume/v3/{project_id}/volumes",
         data=vol_body,
         headers={"X-Auth-Token": token, "Content-Type": "application/json"},
     )

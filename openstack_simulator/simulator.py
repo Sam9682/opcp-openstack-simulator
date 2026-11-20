@@ -7,6 +7,12 @@ import threading
 from pathlib import Path
 
 from openstack_simulator.clock import Clock
+from openstack_simulator.credentials import (
+    DEFAULT_CREDENTIAL_ID,
+    normalize_credential_id,
+    project_id_for,
+    project_name_for,
+)
 from openstack_simulator.limiter import ResourceLimiter
 from openstack_simulator.managers.auth import AuthManager
 from openstack_simulator.managers.baremetal import BaremetalManager
@@ -22,6 +28,7 @@ from openstack_simulator.managers.server_service import ServerCreationService
 from openstack_simulator.managers.transitions import FailureInjector
 from openstack_simulator.managers.volume import VolumeManager
 from openstack_simulator.sim_config import load_sim_config
+from openstack_simulator.sim_config import ConfigError
 from openstack_simulator.store import ResourceStore
 
 DEFAULT_CONFIG: dict[str, object] = {
@@ -90,14 +97,27 @@ def _load_limits_from_ini(ini_path: Path) -> dict[str, int]:
 class Simulator:
     """Main entry point. Initializes all managers with shared state."""
 
-    def __init__(self, config: dict | None = None) -> None:
+    def __init__(
+        self, config: dict | None = None, credential_id: str = DEFAULT_CREDENTIAL_ID
+    ) -> None:
         """Initialize the simulator with optional configuration overrides.
 
         Limits are loaded in this priority order (highest wins):
             1. Programmatic config dict passed to this constructor
             2. conf/limits.ini file (looked up relative to project root or /app)
             3. DEFAULT_CONFIG hardcoded values
+
+        ``credential_id`` names the application credential that owns this
+        environment. Each credential gets its own project
+        (``<credential_id>-project``) and its own ``project_id``.
         """
+        try:
+            self.credential_id = normalize_credential_id(credential_id)
+        except ValueError as exc:
+            raise ConfigError(str(exc)) from None
+        self.project_name = project_name_for(self.credential_id)
+        self.project_id = project_id_for(self.credential_id)
+
         # Start with defaults
         self.config: dict = {**DEFAULT_CONFIG}
 
@@ -164,12 +184,19 @@ class Simulator:
         self.auth_manager = AuthManager(
             store=self.store,
             session_timeout=int(self.config["session_timeout"]),
+            credential_id=self.credential_id,
         )
-        self.compute_manager = ComputeManager(store=self.store, limiter=self.limiter)
-        self.network_manager = NetworkManager(store=self.store, limiter=self.limiter)
-        self.volume_manager = VolumeManager(store=self.store, limiter=self.limiter)
+        self.compute_manager = ComputeManager(
+            store=self.store, limiter=self.limiter, project_id=self.project_id
+        )
+        self.network_manager = NetworkManager(
+            store=self.store, limiter=self.limiter, project_id=self.project_id
+        )
+        self.volume_manager = VolumeManager(
+            store=self.store, limiter=self.limiter, project_id=self.project_id
+        )
         self.security_group_manager = SecurityGroupManager(
-            store=self.store, limiter=self.limiter
+            store=self.store, limiter=self.limiter, project_id=self.project_id
         )
         self.baremetal_manager = BaremetalManager(
             store=self.store,

@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, request, jsonify, current_app, g
+from flask import Blueprint, request, jsonify, g
 
-from openstack_simulator.api.helpers import get_simulator, require_token
+from openstack_simulator.api.helpers import (
+    current_project_id,
+    get_simulator,
+    require_token,
+)
 from openstack_simulator.exceptions import (
     BadRequest,
     Conflict,
@@ -72,7 +76,7 @@ def _visible(instance) -> bool:
 def list_servers():
     """List all servers (instances)."""
     sim = get_simulator()
-    project_id = current_app.config["PROJECT_ID"]
+    project_id = current_project_id()
     instances = [i for i in sim.compute_manager.list() if _visible(i)]
     _refresh(sim, instances)
     instances = [i for i in instances if i.status != "DELETED"]
@@ -85,7 +89,7 @@ def list_servers():
 def list_servers_detail():
     """List all servers with full details."""
     sim = get_simulator()
-    project_id = current_app.config["PROJECT_ID"]
+    project_id = current_project_id()
     instances = [i for i in sim.compute_manager.list() if _visible(i)]
     _refresh(sim, instances)
     servers = [_instance_to_server(i, project_id) for i in instances]
@@ -115,7 +119,7 @@ def _baremetal_flavor(sim, flavor_ref):
 def create_server():
     """Create a new server (instance)."""
     sim = get_simulator()
-    project_id = current_app.config["PROJECT_ID"]
+    project_id = current_project_id()
     data = request.get_json(silent=True) or {}
     server_data = data.get("server", {})
 
@@ -166,7 +170,7 @@ def create_server():
 def get_server(server_id: str):
     """Get a server by ID or name."""
     sim = get_simulator()
-    project_id = current_app.config["PROJECT_ID"]
+    project_id = current_project_id()
 
     # Try by ID first, then by name
     instance = _find_instance(sim, server_id)

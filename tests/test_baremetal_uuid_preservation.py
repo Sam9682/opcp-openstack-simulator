@@ -6,6 +6,7 @@ before and after the fix.
 **Validates: Requirements 3.5, 3.6, 3.7, 3.8, 3.9**
 """
 
+from openstack_simulator.credentials import credential_secret
 import uuid as uuid_lib
 
 from hypothesis import HealthCheck, given, settings, strategies as st
@@ -39,8 +40,8 @@ def _headers(client):
         "auth": {"identity": {
             "methods": ["application_credential"],
             "application_credential": {
-                "id": "simulator-app-credential",
-                "secret": "simulator-secret",
+                "id": "simulator",
+                "secret": credential_secret("simulator"),
             },
         }}
     })

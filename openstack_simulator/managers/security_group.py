@@ -18,9 +18,15 @@ if TYPE_CHECKING:
 class SecurityGroupManager:
     """Simulated Neutron security group manager."""
 
-    def __init__(self, store: ResourceStore, limiter: ResourceLimiter) -> None:
+    def __init__(
+        self,
+        store: ResourceStore,
+        limiter: ResourceLimiter,
+        project_id: str | None = None,
+    ) -> None:
         self.store = store
         self.limiter = limiter
+        self.project_id = project_id
 
     def create(self, name: str, description: str) -> SecurityGroup:
         """Create a new security group.

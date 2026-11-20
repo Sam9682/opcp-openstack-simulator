@@ -27,9 +27,15 @@ if TYPE_CHECKING:
 class NetworkManager:
     """Simulated Neutron networking manager."""
 
-    def __init__(self, store: ResourceStore, limiter: ResourceLimiter) -> None:
+    def __init__(
+        self,
+        store: ResourceStore,
+        limiter: ResourceLimiter,
+        project_id: str | None = None,
+    ) -> None:
         self.store = store
         self.limiter = limiter
+        self.project_id = project_id
 
     def create(self, name: str) -> Network:
         """Create a new network.

@@ -4,6 +4,14 @@ Provides simulated Keystone authentication, Nova compute, Neutron networking,
 and Cinder block storage operations for testing and development purposes.
 """
 
+from openstack_simulator.credentials import (
+    credential_secret,
+    normalize_credential_id,
+    project_id_for,
+    project_name_for,
+    verify_credential,
+)
+from openstack_simulator.environments import EnvironmentRegistry
 from openstack_simulator.exceptions import (
     AuthenticationError,
     DuplicateResourceError,
@@ -31,6 +39,13 @@ from openstack_simulator.simulator import Simulator
 __all__ = [
     # Primary API
     "Simulator",
+    "EnvironmentRegistry",
+    # Application credentials
+    "credential_secret",
+    "verify_credential",
+    "normalize_credential_id",
+    "project_name_for",
+    "project_id_for",
     # Exceptions
     "SimulatorError",
     "AuthenticationError",

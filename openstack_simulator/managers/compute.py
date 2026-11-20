@@ -18,9 +18,15 @@ if TYPE_CHECKING:
 class ComputeManager:
     """Simulated Nova compute manager."""
 
-    def __init__(self, store: ResourceStore, limiter: ResourceLimiter) -> None:
+    def __init__(
+        self,
+        store: ResourceStore,
+        limiter: ResourceLimiter,
+        project_id: str | None = None,
+    ) -> None:
         self.store = store
         self.limiter = limiter
+        self.project_id = project_id
 
     def create(self, name: str, flavor: str, image: str) -> Instance:
         """Create a new compute instance.
@@ -42,6 +48,7 @@ class ComputeManager:
             image=image,
             status="ACTIVE",
             created_at=_now_timestamp(),
+            project_id=self.project_id,
         )
         self.store.add("instances", name, instance)
         return instance

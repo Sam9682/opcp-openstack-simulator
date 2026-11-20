@@ -119,6 +119,7 @@ dmypy.json
 .vscode/
 .idea/
 .kiro/
+.kilo/
 *.swp
 *.swo
 .DS_Store

@@ -10,6 +10,7 @@ Tests cover:
 Requirements: 11.1–11.15, 8.1–8.8, 12.5
 """
 
+from openstack_simulator.credentials import credential_secret
 import pytest
 
 from openstack_simulator.api.app import create_app
@@ -32,8 +33,8 @@ def auth_token(client):
             "identity": {
                 "methods": ["application_credential"],
                 "application_credential": {
-                    "id": "simulator-app-credential",
-                    "secret": "simulator-secret",
+                    "id": "simulator",
+                    "secret": credential_secret("simulator"),
                 },
             }
         }

@@ -10,7 +10,11 @@ from openstack_simulator.api.helpers import (
     require_token,
     build_service_catalog,
 )
-from openstack_simulator.exceptions import AuthenticationError, TokenExpiredError, ResourceNotFoundError
+from openstack_simulator.exceptions import (
+    AuthenticationError,
+    TokenExpiredError,
+    ResourceNotFoundError,
+)
 from openstack_simulator.models import _generate_id
 
 identity_bp = Blueprint("identity", __name__, url_prefix="/identity")
@@ -34,69 +38,80 @@ def version_discovery():
     })
 
 
+def _extract_credentials(data: dict) -> tuple[str, str, str]:
+    """Return ``(auth_type, username, password)`` from a token request body.
+
+    ``auth_type`` is ``application_credential``, ``password`` or ``unknown``.
+    """
+    identity = data.get("auth", {}).get("identity", {})
+    methods = identity.get("methods", [])
+
+    if "application_credential" in methods or "application_credential" in identity:
+        app_cred = identity.get("application_credential", {})
+        username = app_cred.get("name", "") or app_cred.get("id", "")
+        return "application_credential", username, app_cred.get("secret", "")
+
+    if "password" in methods or "password" in identity:
+        user = identity.get("password", {}).get("user", {})
+        username = user.get("name", "") or user.get("id", "")
+        return "password", username, user.get("password", "")
+
+    user = identity.get("user", {})
+    if user:
+        return "password", user.get("name", "") or user.get("id", ""), user.get("password", "")
+    return "unknown", identity.get("name", ""), identity.get("password", "")
+
+
+def _token_project(sim) -> dict:
+    return {
+        "domain": {
+            "id": current_app.config["DOMAIN_ID"],
+            "name": current_app.config["DOMAIN_NAME"],
+        },
+        "id": sim.project_id,
+        "name": sim.project_name,
+    }
+
+
 @identity_bp.route("/v3/auth/tokens", methods=["POST"])
 def create_token():
     """Authenticate and issue a token.
 
-    Supports:
-    - password authentication
-    - application_credential authentication
+    Application credentials authenticate against their own isolated
+    environment: the credential ID selects the environment and the secret must
+    be the SHA-256 hex digest of that ID. Password authentication issues a
+    token in the default environment.
     """
-    sim = get_simulator()
+    registry = current_app.config["ENVIRONMENTS"]
     data = request.get_json(silent=True) or {}
-    auth = data.get("auth", {})
-    identity = auth.get("identity", {})
-    methods = identity.get("methods", [])
+    auth_type, username, password = _extract_credentials(data)
+    identity = data.get("auth", {}).get("identity", {})
+    methods = identity.get("methods", []) or [auth_type if auth_type != "unknown" else "password"]
 
-    username = ""
-    password = ""
-
-    # Handle password authentication
-    if "password" in methods:
-        user_data = identity.get("password", {}).get("user", {})
-        username = user_data.get("name", "") or user_data.get("id", "")
-        password = user_data.get("password", "")
-    # Handle application_credential authentication
-    elif "application_credential" in methods:
-        app_cred = identity.get("application_credential", {})
-        # Treat app credential id/name as username, secret as password
-        username = app_cred.get("name", "") or app_cred.get("id", "")
-        password = app_cred.get("secret", "")
-    # Handle direct password auth without explicit methods array (common in CLI usage)
-    else:
-        # Check for direct password auth format
-        user_data = identity.get("password", {}).get("user", {})
-        if user_data:
-            username = user_data.get("name", "") or user_data.get("id", "")
-            password = user_data.get("password", "")
-        else:
-            # Try to extract from top-level auth object
-            username = identity.get("user", {}).get("name", "") or identity.get("user", {}).get("id", "")
-            password = identity.get("user", {}).get("password", "")
-        
-        # If we still don't have username/password, check for simple format
-        if not username and not password:
-            # Check for simpler format that might be used by CLI tools
-            username = identity.get("name", "") or identity.get("user", {}).get("name", "")
-            password = identity.get("password", "") or identity.get("user", {}).get("password", "")
-
-    # Validate that we have both username and password
     if not username or not password:
-        return jsonify({"error": {"message": "Username and password must not be empty", "code": 400}}), 400
+        return jsonify({
+            "error": {"message": "Username and password must not be empty", "code": 400}
+        }), 400
 
-    try:
-        token = sim.auth_manager.authenticate(username, password)
-    except AuthenticationError as e:
-        return jsonify({"error": {"message": str(e), "code": 401}}), 401
+    if auth_type == "application_credential":
+        try:
+            token, sim = registry.authenticate(username, password)
+        except AuthenticationError as e:
+            return jsonify({"error": {"message": str(e), "code": 401}}), 401
+    else:
+        sim = registry.default
+        try:
+            token = sim.auth_manager.authenticate(username, password)
+        except AuthenticationError as e:
+            return jsonify({"error": {"message": str(e), "code": 401}}), 401
 
     base_url = get_base_url()
-    project_id = current_app.config["PROJECT_ID"]
     domain_id = current_app.config["DOMAIN_ID"]
     domain_name = current_app.config["DOMAIN_NAME"]
 
     response_body = {
         "token": {
-            "methods": methods if methods else ["password"],  # Ensure methods are included even if not explicitly provided
+            "methods": methods,
             "user": {
                 "domain": {"id": domain_id, "name": domain_name},
                 "id": _generate_id(),
@@ -106,16 +121,12 @@ def create_token():
             "audit_ids": [_generate_id()[:20]],
             "expires_at": token.expires_at,
             "issued_at": token.issued_at,
-            "project": {
-                "domain": {"id": domain_id, "name": domain_name},
-                "id": project_id,
-                "name": "simulator-project",
-            },
+            "project": _token_project(sim),
             "roles": [
                 {"id": _generate_id(), "name": "admin"},
                 {"id": _generate_id(), "name": "member"},
             ],
-            "catalog": build_service_catalog(base_url),
+            "catalog": build_service_catalog(base_url, sim.project_id),
         }
     }
 
@@ -142,7 +153,6 @@ def validate_token():
 
     token_obj = sim.store.tokens.get(subject_token)
     base_url = get_base_url()
-    project_id = current_app.config["PROJECT_ID"]
     domain_id = current_app.config["DOMAIN_ID"]
     domain_name = current_app.config["DOMAIN_NAME"]
 
@@ -156,16 +166,12 @@ def validate_token():
             },
             "expires_at": token_obj.expires_at,
             "issued_at": token_obj.issued_at,
-            "project": {
-                "domain": {"id": domain_id, "name": domain_name},
-                "id": project_id,
-                "name": "simulator-project",
-            },
+            "project": _token_project(sim),
             "roles": [
                 {"id": _generate_id(), "name": "admin"},
                 {"id": _generate_id(), "name": "member"},
             ],
-            "catalog": build_service_catalog(base_url),
+            "catalog": build_service_catalog(base_url, sim.project_id),
         }
     })
 
@@ -186,29 +192,29 @@ def check_token():
     return "", 200
 
 
-def _project_dict(base_url: str) -> dict:
-    """Build the single simulator project from config values."""
-    project_id = current_app.config["PROJECT_ID"]
+def _project_dict(base_url: str, sim) -> dict:
+    """Build the project owned by ``sim``'s credential."""
     domain_id = current_app.config["DOMAIN_ID"]
     return {
-        "id": project_id,
-        "name": "simulator-project",
+        "id": sim.project_id,
+        "name": sim.project_name,
         "domain_id": domain_id,
         "enabled": True,
-        "description": "",
+        "description": f"Environment of application credential '{sim.credential_id}'",
         "parent_id": domain_id,
         "is_domain": False,
-        "links": {"self": f"{base_url}/identity/v3/projects/{project_id}"},
+        "links": {"self": f"{base_url}/identity/v3/projects/{sim.project_id}"},
     }
 
 
 @identity_bp.route("/v3/projects", methods=["GET"])
 @require_token
 def list_projects():
-    """List projects (always the single simulator project)."""
+    """List the projects of the caller's environment."""
     base_url = get_base_url()
+    sim = get_simulator()
     return jsonify({
-        "projects": [_project_dict(base_url)],
+        "projects": [_project_dict(base_url, sim)],
         "links": {
             "self": f"{base_url}/identity/v3/projects",
             "previous": None,
@@ -220,9 +226,10 @@ def list_projects():
 @identity_bp.route("/v3/projects/<project_id>", methods=["GET"])
 @require_token
 def get_project(project_id):
-    """Show the simulator project; 404 for any other id."""
-    if project_id != current_app.config["PROJECT_ID"]:
+    """Show a project by ID; project names are accepted too."""
+    sim = get_simulator()
+    if project_id not in (sim.project_id, sim.project_name):
         return jsonify({
             "error": {"message": f"Could not find project: {project_id}", "code": 404}
         }), 404
-    return jsonify({"project": _project_dict(get_base_url())})
+    return jsonify({"project": _project_dict(get_base_url(), sim)})

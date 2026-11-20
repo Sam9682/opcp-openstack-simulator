@@ -7,6 +7,7 @@ Flask test client. On UNFIXED code these tests are expected to FAIL because
 **Validates: Requirements 1.7, 1.8, 1.9** (expected behavior 2.7, 2.8, 2.9)
 """
 
+from openstack_simulator.credentials import credential_secret
 import uuid as uuid_lib
 
 import pytest
@@ -40,8 +41,8 @@ def _cli_headers(client):
         "auth": {"identity": {
             "methods": ["application_credential"],
             "application_credential": {
-                "id": "simulator-app-credential",
-                "secret": "simulator-secret",
+                "id": "simulator",
+                "secret": credential_secret("simulator"),
             },
         }}
     })

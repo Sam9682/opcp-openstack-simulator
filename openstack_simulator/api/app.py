@@ -9,7 +9,7 @@ from pathlib import Path
 import markdown
 from flask import Flask, request
 
-from openstack_simulator.simulator import Simulator
+from openstack_simulator.environments import EnvironmentRegistry
 from openstack_simulator.api.identity import identity_bp
 from openstack_simulator.api.compute import compute_bp
 from openstack_simulator.api.network import network_bp
@@ -24,7 +24,8 @@ def create_app(config: dict | None = None) -> Flask:
     """Create and configure the Flask application.
 
     Args:
-        config: Optional simulator configuration overrides.
+        config: Optional simulator configuration overrides applied to every
+            credential environment.
 
     Returns:
         Configured Flask app with all OpenStack API blueprints registered.
@@ -32,12 +33,16 @@ def create_app(config: dict | None = None) -> Flask:
     app = Flask(__name__)
     app.config["JSON_SORT_KEYS"] = False
 
-    # Create a single Simulator instance shared across all requests
-    simulator = Simulator(config)
+    # One isolated simulator environment per application credential.
+    registry = EnvironmentRegistry(config)
+    app.config["ENVIRONMENTS"] = registry
+    # Default environment, kept as ``SIMULATOR`` for tooling and tests.
+    simulator = registry.default
     app.config["SIMULATOR"] = simulator
 
     # Fake project/domain IDs used throughout responses
-    app.config["PROJECT_ID"] = "fake-project-id-00000000001"
+    app.config["PROJECT_ID"] = simulator.project_id
+    app.config["PROJECT_NAME"] = simulator.project_name
     app.config["DOMAIN_ID"] = "default"
     app.config["DOMAIN_NAME"] = "Default"
     app.config["REGION"] = "RegionOne"

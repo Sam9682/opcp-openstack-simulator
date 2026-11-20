@@ -68,14 +68,14 @@ def build_caller_context(token_id: str) -> CallerContext:
     ``now`` comes from the ``now`` query parameter (wins) or ``X-Sim-Now``,
     otherwise from the simulator clock. Raises InvalidTimestamp (400).
     """
-    sim = current_app.config["SIMULATOR"]
+    sim = get_simulator()
     raw = request.args.get("now")
     if raw is None:
         raw = request.headers.get("X-Sim-Now")
     override = Clock.parse(raw) if raw is not None else None
     now = sim.clock.now(override)
     token = sim.store.tokens.get(token_id)
-    project_id = getattr(token, "project_id", None) or current_app.config["PROJECT_ID"]
+    project_id = getattr(token, "project_id", None) or sim.project_id
     roles = getattr(token, "roles", None) or []
     return CallerContext(
         project_id=project_id,
@@ -98,8 +98,48 @@ def register_error_handlers(app) -> None:
 
 
 def get_simulator():
-    """Get the Simulator instance from the Flask app config."""
-    return current_app.config["SIMULATOR"]
+    """Return the simulator environment serving the current request.
+
+    The environment is selected from the ``X-Auth-Token`` of the request, so
+    each application credential sees only its own isolated state. Requests
+    without a known token fall back to the default environment (for example
+    the unauthenticated token-issue endpoint).
+    """
+    environment = g.get("simulator")
+    if environment is not None:
+        return environment
+    environment = resolve_environment()
+    if environment is None:
+        environment = current_app.config["SIMULATOR"]
+    g.simulator = environment
+    return environment
+
+
+def resolve_environment():
+    """Environment that issued the request's token, or None."""
+    registry = current_app.config.get("ENVIRONMENTS")
+    if registry is None:
+        return None
+    for header in ("X-Auth-Token", "X-Subject-Token"):
+        token_id = request.headers.get(header)
+        if token_id:
+            environment = registry.environment_for_token(token_id)
+            if environment is not None:
+                return environment
+    return None
+
+
+def current_project_id() -> str:
+    """Project ID of the caller (or of the default environment)."""
+    ctx = g.get("caller_context")
+    if ctx is not None:
+        return ctx.project_id
+    return get_simulator().project_id
+
+
+def current_project_name() -> str:
+    """Project name of the caller (or of the default environment)."""
+    return get_simulator().project_name
 
 
 def get_base_url() -> str:
@@ -117,21 +157,24 @@ def require_token(f):
         if not token_id:
             return jsonify({"error": {"message": "Authentication required", "code": 401}}), 401
 
-        sim = get_simulator()
+        registry = current_app.config.get("ENVIRONMENTS")
+        environment = registry.environment_for_token(token_id) if registry else None
+        sim = environment or current_app.config["SIMULATOR"]
         try:
             sim.auth_manager.validate_token(token_id)
         except (ResourceNotFoundError, TokenExpiredError):
             return jsonify({"error": {"message": "Invalid or expired token", "code": 401}}), 401
 
+        g.simulator = sim
         g.caller_context = build_caller_context(token_id)
         return f(*args, **kwargs)
 
     return decorated
 
 
-def build_service_catalog(base_url: str) -> list[dict]:
+def build_service_catalog(base_url: str, project_id: str | None = None) -> list[dict]:
     """Build a minimal service catalog for the token response."""
-    project_id = current_app.config["PROJECT_ID"]
+    project_id = project_id or get_simulator().project_id
     region = current_app.config["REGION"]
 
     services = [

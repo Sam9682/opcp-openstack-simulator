@@ -15,6 +15,7 @@ body, create no server and leave the simulator state unchanged.
 Requirements: 1.12, 1.13, 2.12, 2.13, 2.14
 """
 
+from openstack_simulator.credentials import credential_secret
 import copy
 from dataclasses import asdict, is_dataclass
 
@@ -44,8 +45,8 @@ def _login(client):
             "identity": {
                 "methods": ["application_credential"],
                 "application_credential": {
-                    "id": "simulator-app-credential",
-                    "secret": "simulator-secret",
+                    "id": "simulator",
+                    "secret": credential_secret("simulator"),
                 },
             }
         }
