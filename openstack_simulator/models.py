@@ -540,7 +540,10 @@ class BaremetalPort:
     def to_dict(self) -> dict:
         return {
             "id": self.id,
+            "uuid": self.id,
             "node_id": self.node_id,
+            # Ironic's own field name; python-ironicclient reads this one.
+            "node_uuid": self.node_id,
             "address": self.address,
             "status": self.status,
             "created_at": self.created_at,

@@ -113,7 +113,7 @@ def validate_node(node_ident: str):
     })
 
 
-@baremetal_bp.route("/nodes/<node_ident>/ports", methods=["GET"])
+@baremetal_bp.route("/nodes/<node_ident>/ports", methods=["GET"], strict_slashes=False)
 @require_token
 def list_node_ports(node_ident: str):
     """List ports belonging to a baremetal node."""
@@ -385,43 +385,54 @@ def _apply_node_field_ops(sim, node, ops: list) -> list:
 # --- Port endpoints ---
 
 
-@baremetal_bp.route("/ports", methods=["GET"])
+@baremetal_bp.route("/ports", methods=["GET"], strict_slashes=False)
 @require_token
 def list_ports():
-    """List all active baremetal ports, optionally filtered by node_id."""
+    """List all active baremetal ports, optionally filtered by node."""
     sim = get_simulator()
-    node_id = request.args.get("node_id")
-    ports = sim.baremetal_manager.list_ports(node_id=node_id)
+    ports = sim.baremetal_manager.list_ports(node_id=_port_filter_node_id(sim))
     return jsonify({"ports": [p.to_dict() for p in ports]})
 
 
-@baremetal_bp.route("/ports/detail", methods=["GET"])
+@baremetal_bp.route("/ports/detail", methods=["GET"], strict_slashes=False)
 @require_token
 def list_ports_detail():
-    """List all active baremetal ports with detail, optionally filtered by node_id."""
+    """List all active baremetal ports with detail, optionally filtered by node."""
     sim = get_simulator()
-    node_id = request.args.get("node_id")
-    ports = sim.baremetal_manager.list_ports(node_id=node_id)
+    ports = sim.baremetal_manager.list_ports(node_id=_port_filter_node_id(sim))
     return jsonify({"ports": [p.to_dict() for p in ports]})
 
 
-@baremetal_bp.route("/ports", methods=["POST"])
+@baremetal_bp.route("/ports", methods=["POST"], strict_slashes=False)
 @require_token
 def create_port():
     """Create a new baremetal port."""
     sim = get_simulator()
     data = request.get_json(silent=True) or {}
 
-    node_id = data.get("node_id", "")
+    # python-ironicclient sends ``node_uuid``; the simulator's own API uses
+    # ``node_id``. Accept both, plus a node name or UUID in either field.
+    node_ident = data.get("node_uuid") or data.get("node_id") or ""
     address = data.get("address", "")
+    port_uuid = data.get("uuid")
 
-    if not node_id:
-        return jsonify({"error": {"message": "Port node_id is required", "code": 400}}), 400
+    if not node_ident:
+        return jsonify({"error": {"message": "Port node_uuid is required", "code": 400}}), 400
     if not address:
         return jsonify({"error": {"message": "Port address (MAC) is required", "code": 400}}), 400
 
+    node = _find_node(sim, node_ident)
+    if node is None:
+        return jsonify({
+            "error": {"message": f"Node {node_ident} not found", "code": 404}
+        }), 404
+
     try:
-        port = sim.baremetal_manager.create_port(node_id=node_id, address=address)
+        port = sim.baremetal_manager.create_port(
+            node_id=node.id, address=address, uuid=port_uuid
+        )
+    except ValueError as e:
+        return jsonify({"error": {"message": str(e), "code": 400}}), 400
     except ResourceNotFoundError as e:
         return jsonify({"error": {"message": str(e), "code": 404}}), 404
     except DuplicateResourceError as e:
@@ -432,7 +443,19 @@ def create_port():
     return jsonify(port.to_dict()), 201
 
 
-@baremetal_bp.route("/ports/<port_ident>", methods=["DELETE"])
+@baremetal_bp.route("/ports/<port_ident>", methods=["GET"], strict_slashes=False)
+@require_token
+def get_port(port_ident: str):
+    """Get a baremetal port by UUID or MAC address."""
+    sim = get_simulator()
+    port = _find_port(sim, port_ident)
+    if port is None:
+        return jsonify({"error": {"message": f"Port {port_ident} not found", "code": 404}}), 404
+
+    return jsonify(port.to_dict())
+
+
+@baremetal_bp.route("/ports/<port_ident>", methods=["DELETE"], strict_slashes=False)
 @require_token
 def delete_port(port_ident: str):
     """Soft-delete a baremetal port."""
@@ -465,6 +488,19 @@ def _find_node(sim, identifier: str):
             return n
 
     return None
+
+
+def _port_filter_node_id(sim) -> str | None:
+    """Resolve the ``node``/``node_uuid``/``node_id`` query filter to a node id."""
+    ident = (
+        request.args.get("node")
+        or request.args.get("node_uuid")
+        or request.args.get("node_id")
+    )
+    if not ident:
+        return None
+    node = _find_node(sim, ident)
+    return node.id if node is not None else ident
 
 
 def _find_port(sim, identifier: str):

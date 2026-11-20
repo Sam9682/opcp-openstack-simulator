@@ -358,6 +358,93 @@ class TestPortEndpoints:
         })
         assert resp.status_code == 409
 
+    def test_create_port_accepts_node_uuid(self, client, auth_token):
+        """python-ironicclient sends ``node_uuid``, not ``node_id``."""
+        create_resp = client.post("/baremetal/v1/nodes", headers=_headers(auth_token), json={
+            "name": "uuid-port-host", "driver": "ipmi"
+        })
+        node_id = create_resp.get_json()["id"]
+
+        resp = client.post("/baremetal/v1/ports", headers=_headers(auth_token), json={
+            "node_uuid": node_id, "address": "52:54:00:aa:bb:01"
+        })
+        assert resp.status_code == 201
+        data = resp.get_json()
+        assert data["node_id"] == node_id
+        assert data["node_uuid"] == node_id
+        assert data["uuid"] == data["id"]
+
+    def test_create_port_accepts_node_name(self, client, auth_token):
+        client.post("/baremetal/v1/nodes", headers=_headers(auth_token), json={
+            "name": "named-port-host", "driver": "ipmi"
+        })
+
+        resp = client.post("/baremetal/v1/ports", headers=_headers(auth_token), json={
+            "node_uuid": "named-port-host", "address": "52:54:00:aa:bb:02"
+        })
+        assert resp.status_code == 201
+
+    def test_create_port_with_explicit_uuid(self, client, auth_token):
+        create_resp = client.post("/baremetal/v1/nodes", headers=_headers(auth_token), json={
+            "name": "explicit-uuid-host", "driver": "ipmi"
+        })
+        node_id = create_resp.get_json()["id"]
+        port_uuid = "11111111-2222-3333-4444-555555555555"
+
+        resp = client.post("/baremetal/v1/ports", headers=_headers(auth_token), json={
+            "node_uuid": node_id, "address": "52:54:00:aa:bb:03", "uuid": port_uuid
+        })
+        assert resp.status_code == 201
+        assert resp.get_json()["id"] == port_uuid
+
+    def test_create_port_invalid_uuid_returns_400(self, client, auth_token):
+        create_resp = client.post("/baremetal/v1/nodes", headers=_headers(auth_token), json={
+            "name": "bad-uuid-host", "driver": "ipmi"
+        })
+        node_id = create_resp.get_json()["id"]
+
+        resp = client.post("/baremetal/v1/ports", headers=_headers(auth_token), json={
+            "node_uuid": node_id, "address": "52:54:00:aa:bb:04", "uuid": "not-a-uuid"
+        })
+        assert resp.status_code == 400
+
+    def test_list_ports_filtered_by_node_query_param(self, client, auth_token):
+        """ironicclient lists ports with ``?node=<uuid>`` and a trailing slash."""
+        create_resp = client.post("/baremetal/v1/nodes", headers=_headers(auth_token), json={
+            "name": "node-param-host", "driver": "ipmi"
+        })
+        node_id = create_resp.get_json()["id"]
+
+        client.post("/baremetal/v1/ports", headers=_headers(auth_token), json={
+            "node_uuid": node_id, "address": "52:54:00:aa:bb:05"
+        })
+
+        for path in (
+            f"/baremetal/v1/ports/?node={node_id}",
+            f"/baremetal/v1/ports?node_uuid={node_id}",
+            f"/baremetal/v1/ports/detail?node={node_id}",
+        ):
+            resp = client.get(path, headers=_headers(auth_token))
+            assert resp.status_code == 200, path
+            ports = resp.get_json()["ports"]
+            assert len(ports) == 1, path
+            assert ports[0]["node_id"] == node_id
+
+    def test_get_port_by_uuid_and_mac(self, client, auth_token):
+        create_resp = client.post("/baremetal/v1/nodes", headers=_headers(auth_token), json={
+            "name": "get-port-host", "driver": "ipmi"
+        })
+        node_id = create_resp.get_json()["id"]
+
+        port = client.post("/baremetal/v1/ports", headers=_headers(auth_token), json={
+            "node_uuid": node_id, "address": "52:54:00:aa:bb:06"
+        }).get_json()
+
+        for ident in (port["id"], port["address"]):
+            resp = client.get(f"/baremetal/v1/ports/{ident}", headers=_headers(auth_token))
+            assert resp.status_code == 200
+            assert resp.get_json()["id"] == port["id"]
+
     def test_port_quota_exceeded_returns_413(self, client, auth_token):
         # Default limit is 20 ports
         create_resp = client.post("/baremetal/v1/nodes", headers=_headers(auth_token), json={

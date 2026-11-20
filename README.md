@@ -425,9 +425,9 @@ The `VolumeManager` creates snapshots through the action above. No separate REST
 | PUT | `/baremetal/v1/nodes/<node_ident>/states/provision` | Set provision state |
 | PUT, DELETE | `/baremetal/v1/nodes/<node_ident>/maintenance` | Set or clear maintenance |
 | PUT, DELETE | `/baremetal/v1/nodes/<node_ident>/traits/<trait>` | Add or remove a trait |
-| GET, POST | `/baremetal/v1/ports` | List or create ports |
+| GET, POST | `/baremetal/v1/ports` | List or create ports (filter with `?node=`, `?node_uuid=` or `?node_id=`) |
 | GET | `/baremetal/v1/ports/detail` | List ports with details |
-| DELETE | `/baremetal/v1/ports/<port_ident>` | Delete a port (MAC or UUID) |
+| GET, DELETE | `/baremetal/v1/ports/<port_ident>` | Get or delete a port (MAC or UUID) |
 
 ### Image
 
@@ -531,7 +531,7 @@ sim.baremetal_manager.update_node(name, **updates)              # → BaremetalN
 sim.baremetal_manager.delete_node(name)                         # → None
 sim.baremetal_manager.set_power_state(name, target)             # → BaremetalNode
 sim.baremetal_manager.set_provision_state(name, target)         # → BaremetalNode
-sim.baremetal_manager.create_port(node_id, address)             # → BaremetalPort
+sim.baremetal_manager.create_port(node_id, address, uuid=None)  # → BaremetalPort
 sim.baremetal_manager.list_ports(node_id=None)                  # → list[BaremetalPort]
 sim.baremetal_manager.delete_port(address)                      # → None
 ```

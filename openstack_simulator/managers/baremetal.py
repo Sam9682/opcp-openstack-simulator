@@ -335,17 +335,21 @@ class BaremetalManager:
 
     # --- Port operations ---
 
-    def create_port(self, node_id: str, address: str) -> BaremetalPort:
+    def create_port(
+        self, node_id: str, address: str, uuid: str | None = None
+    ) -> BaremetalPort:
         """Create a new baremetal port.
 
         Args:
             node_id: UUID of the parent node (the node's id field).
             address: MAC address for the port.
+            uuid: Optional client-supplied port UUID (``--uuid``).
 
         Raises:
             ResourceLimitExceededError: If max_baremetal_ports reached.
             ResourceNotFoundError: If node_id does not reference an existing non-deleted node.
             DuplicateResourceError: If MAC address already exists among non-deleted ports.
+            ValueError: If uuid is given and is not a valid UUID.
         """
         self.limiter.check("baremetal_ports", self.store)
         self._sync()
@@ -365,9 +369,17 @@ class BaremetalManager:
                 f"Baremetal port with address '{address}' already exists"
             )
 
+        if uuid is not None:
+            try:
+                port_id = str(uuid_lib.UUID(uuid))
+            except (ValueError, AttributeError, TypeError):
+                raise ValueError(f"Invalid port UUID: {uuid!r}")
+        else:
+            port_id = str(uuid_lib.uuid4())
+
         now = datetime.now(timezone.utc).isoformat()
         port = BaremetalPort(
-            id=str(uuid_lib.uuid4()),
+            id=port_id,
             node_id=node_id,
             address=address,
             status="ACTIVE",
