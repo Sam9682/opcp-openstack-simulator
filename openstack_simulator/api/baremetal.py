@@ -81,7 +81,10 @@ def create_node():
             cpu_arch=data.get("cpu_arch", "x86_64"),
             driver_info=data.get("driver_info"),
             properties=data.get("properties"),
+            uuid=data.get("uuid"),
         )
+    except ValueError as e:
+        return jsonify({"error": {"message": str(e), "code": 400}}), 400
     except ResourceLimitExceededError as e:
         return jsonify({"overLimit": {"message": str(e), "code": 413}}), 413
     except DuplicateResourceError as e:
